@@ -1,10 +1,12 @@
 # Fonti
 
-A command-line tool for installing fonts on Windows.
+A command-line tool for installing and uninstalling fonts on Windows.
 
-- Use `fonttools` to extract the name from font file
-- Configures ACL settings for user-level font directories
-- Utilizes Windows GDI APIs and system broadcasts to ensure fonts are available immediately without a reboot
+- Supports `.ttf`, `.otf`, `.ttc`, and `.otc` font files.
+- Uses `fonttools` to calculate Windows font registry names.
+- Installs fonts for the current user by default.
+- Can install or uninstall global fonts with `--global` when run as administrator.
+- Calls Windows GDI APIs and broadcasts `WM_FONTCHANGE` so fonts can become available immediately. If immediate activation fails, the persistent install remains and a reboot may be required.
 
 ## Install
 
@@ -14,11 +16,49 @@ uv tool install .
 uv tool install git+https://github.com/Noai-oss/fonti
 ```
 
-## Commands
+## Usage
 
-- `fonti install <source_dir> [--global]`
-- `fonti list [--global]`
-- `fonti uninstall "<font_name>" [--global]`
+Inspect the registry name that Fonti will use:
+
+```powershell
+fonti inspect <font-file-or-directory>
+```
+
+Install a font file or all supported fonts under a directory:
+
+```powershell
+fonti install <font-file-or-directory>
+fonti install <font-file-or-directory> --force
+fonti install <font-file-or-directory> --global
+```
+
+List installed fonts:
+
+```powershell
+fonti list
+fonti list --global
+```
+
+Uninstall by exact registry name:
+
+```powershell
+fonti uninstall "Cascadia Mono Bold (TrueType)"
+fonti uninstall "Cascadia Mono Bold (TrueType)" --global
+```
+
+Uninstall by installed file name or absolute path:
+
+```powershell
+fonti uninstall --file CascadiaMono-Bold.ttf
+fonti uninstall --file "C:\Users\me\AppData\Local\Microsoft\Windows\Fonts\CascadiaMono-Bold.ttf"
+```
+
+## Notes
+
+- User installs write font files to `%LOCALAPPDATA%\Microsoft\Windows\Fonts` and registry values to `HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`.
+- Global installs write font files to `%WINDIR%\Fonts` and registry values to `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`.
+- `--force` overwrites an existing font file with the same file name. Without `--force`, existing files are skipped.
+- `--file` is often easier than uninstalling by registry name, especially for font collections or long generated names.
 
 ## Reference
 
