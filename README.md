@@ -23,6 +23,6 @@ uv tool install git+https://github.com/Noai-oss/fonti
 ## Reference
 
 - [WM_FONTCHANGE](https://learn.microsoft.com/en-us/windows/win32/gdi/wm-fontchange)
-- [AddFontResourceW]https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-addfontresourcew
+- [AddFontResourceW](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-addfontresourcew)
 - [fonttools](https://github.com/fonttools/fonttools)
 - [scoop-nerd-fonts](https://github.com/matthewjberger/scoop-nerd-fonts)
