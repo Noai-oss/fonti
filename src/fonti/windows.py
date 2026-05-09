@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import ctypes
 import os
+import subprocess
+import sys
 import winreg
+from collections.abc import Sequence
 from ctypes import wintypes
 from pathlib import Path
 
@@ -25,6 +28,36 @@ def is_admin() -> bool:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
         return False
+
+
+def relaunch_as_admin(argv: Sequence[str] | None = None) -> None:
+    """Relaunch Fonti through UAC and exit the current process."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "--wait-on-exit" not in args:
+        args = ["--wait-on-exit", *args]
+
+    params = subprocess.list2cmdline(["-m", "fonti.cli", *args])
+
+    ShellExecuteW = ctypes.windll.shell32.ShellExecuteW
+    ShellExecuteW.argtypes = [
+        wintypes.HWND,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        ctypes.c_int,
+    ]
+    ShellExecuteW.restype = ctypes.c_ssize_t
+
+    result = ShellExecuteW(None, "runas", sys.executable, params, os.getcwd(), 1)
+
+    if result <= 32:
+        raise SystemExit(
+            f"Error: Failed to request administrator privileges "
+            f"(ShellExecuteW returned {result})."
+        )
+
+    raise SystemExit(0)
 
 
 def get_reg_root(is_global: bool) -> int:
