@@ -83,13 +83,19 @@ def add_font_filter_arguments(
     action: str,
     *,
     include_format: bool = True,
+    match_file_name: bool = True,
 ) -> None:
     """Add shared font filtering arguments to a subcommand parser."""
+    name_target = (
+        "file name, including extension, or registry name"
+        if match_file_name
+        else "registry name"
+    )
     command_parser.add_argument(
         "--name-regex",
         help=(
-            f"Only {action} fonts whose file name, including extension, "
-            "or registry name matches this regex. Matching is case-insensitive."
+            f"Only {action} fonts whose {name_target} matches this regex. "
+            "Matching is case-insensitive."
         ),
     )
 
@@ -143,7 +149,12 @@ def main() -> None:
         dest="is_global",
         help="List global fonts from HKLM instead of user fonts from HKCU.",
     )
-    add_font_filter_arguments(list_parser, "list", include_format=False)
+    add_font_filter_arguments(
+        list_parser,
+        "list",
+        include_format=False,
+        match_file_name=False,
+    )
 
     uninstall_parser = subparsers.add_parser("uninstall", help="Uninstall fonts")
     uninstall_parser.add_argument(
@@ -167,7 +178,12 @@ def main() -> None:
         action="store_true",
         help="Confirm filtered uninstall operations that may remove multiple fonts.",
     )
-    add_font_filter_arguments(uninstall_parser, "uninstall", include_format=False)
+    add_font_filter_arguments(
+        uninstall_parser,
+        "uninstall",
+        include_format=False,
+        match_file_name=False,
+    )
 
     args = parser.parse_args()
 

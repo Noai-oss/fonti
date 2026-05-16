@@ -110,16 +110,14 @@ def get_installed_font_matches(
     is_global: bool = False,
     name_regex: str | None = None,
 ) -> list[tuple[str, str, Path]]:
-    """Return installed fonts matching registry/file name filters."""
+    """Return installed fonts matching registry name filters."""
     pattern = compile_name_regex(name_regex) if name_regex else None
     matches: list[tuple[str, str, Path]] = []
 
     for name, value, _ in iter_font_registry(is_global):
         installed_path = get_abs_registry_font_path(value, is_global)
 
-        if pattern and not (
-            pattern.search(name) or pattern.search(installed_path.name)
-        ):
+        if pattern and not pattern.search(name):
             continue
 
         matches.append((name, value, installed_path))
@@ -306,7 +304,7 @@ def uninstall_by_filters(
     name_regex: str | None = None,
     is_global: bool = False,
 ) -> None:
-    """Uninstall installed fonts matching registry/file name filters."""
+    """Uninstall installed fonts matching registry name filters."""
     if not name_regex:
         raise SystemExit("Error: uninstall filters require --name-regex.")
 

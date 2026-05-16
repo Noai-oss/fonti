@@ -69,7 +69,7 @@ fonti uninstall --name-regex 'Mono|Code' --yes
 - Global installs write font files to `%WINDIR%\Fonts` and registry values to `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`.
 - `--force` overwrites an existing font file with the same file name. Without `--force`, existing files are skipped.
 - `install --format` accepts `ttf`, `otf`, `ttc`, and `otc`. Use commas or repeat the option, such as `--format ttf,otf`.
-- `--name-regex` matches the file name including extension, or the Windows registry font name. Matching is case-insensitive. In PowerShell, quote regex patterns with single quotes.
+- `install --name-regex` matches the file name including extension, or the Windows registry font name. `list --name-regex` and filtered `uninstall --name-regex` match the Windows registry font name. Matching is case-insensitive. In PowerShell, quote regex patterns with single quotes.
 - `--file` is often easier than uninstalling by registry name, especially for font collections or long generated names.
 - Filtered uninstall supports `--name-regex` and requires `--yes` because it can remove multiple fonts.
 
