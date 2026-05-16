@@ -59,7 +59,6 @@ def compile_name_regex(name_regex: str) -> re.Pattern[str]:
 def list_installed_fonts(
     is_global: bool = False,
     name_regex: str | None = None,
-    formats: list[str] | None = None,
 ) -> None:
     """Print a list of installed fonts for the defined scope and filters."""
     scope = "global" if is_global else "user"
@@ -69,7 +68,6 @@ def list_installed_fonts(
     matches = get_installed_font_matches(
         is_global=is_global,
         name_regex=name_regex,
-        formats=formats,
     )
 
     if not matches:
@@ -111,21 +109,13 @@ def filter_font_files(
 def get_installed_font_matches(
     is_global: bool = False,
     name_regex: str | None = None,
-    formats: list[str] | None = None,
 ) -> list[tuple[str, str, Path]]:
-    """Return installed fonts matching registry/file name and format filters."""
-    allowed_formats = normalize_formats(formats)
+    """Return installed fonts matching registry/file name filters."""
     pattern = compile_name_regex(name_regex) if name_regex else None
     matches: list[tuple[str, str, Path]] = []
 
     for name, value, _ in iter_font_registry(is_global):
         installed_path = get_abs_registry_font_path(value, is_global)
-
-        if allowed_formats:
-            installed_format = installed_path.suffix.casefold().removeprefix(".")
-
-            if installed_format not in allowed_formats:
-                continue
 
         if pattern and not (
             pattern.search(name) or pattern.search(installed_path.name)

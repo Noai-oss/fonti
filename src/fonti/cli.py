@@ -143,7 +143,7 @@ def main() -> None:
         dest="is_global",
         help="List global fonts from HKLM instead of user fonts from HKCU.",
     )
-    add_font_filter_arguments(list_parser, "list")
+    add_font_filter_arguments(list_parser, "list", include_format=False)
 
     uninstall_parser = subparsers.add_parser("uninstall", help="Uninstall fonts")
     uninstall_parser.add_argument(
@@ -188,7 +188,6 @@ def main() -> None:
             list_installed_fonts(
                 is_global=args.is_global,
                 name_regex=args.name_regex,
-                formats=args.formats,
             )
 
         case "uninstall":
