@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import winreg
 from pathlib import Path
 from typing import NamedTuple
@@ -13,9 +14,6 @@ from fonti.win.reg import (
     iter_font_registry_values,
     resolve_registry_font_path,
 )
-
-
-from collections.abc import Iterable
 
 
 class UninstallTarget(NamedTuple):
@@ -61,14 +59,17 @@ def uninstall_font_targets(
         winreg.KEY_ALL_ACCESS,
     ) as key:
         for target in targets:
-            remove_font_resource(target.path)
-            winreg.DeleteValue(key, target.name)
+            removed = remove_font_resource(target.path)
 
             if target.path.exists():
                 target.path.unlink()
 
+            winreg.DeleteValue(key, target.name)
+
             print(f"Uninstalled: {target.name}")
             print(f"  File: {target.path}")
+            if not removed:
+                print("  Immediate deactivation: failed; reboot may be required.")
 
     broadcast_font_change()
 

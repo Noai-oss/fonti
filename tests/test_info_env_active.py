@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import fonti.inspect as inspect_module
+import fonti.info as info_module
 import fonti.win.active as active_module
 import fonti.win.env as env_module
 
@@ -28,35 +28,35 @@ class FakeWinFunction:
         return self.return_value
 
 
-def test_inspect_prints_font_metadata(
+def test_info_prints_font_metadata(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     font = tmp_path / "Demo.ttf"
-    monkeypatch.setattr(inspect_module, "find", lambda source: iter([font]))
+    monkeypatch.setattr(info_module, "find", lambda source: iter([font]))
     monkeypatch.setattr(
-        inspect_module,
+        info_module,
         "reg_name",
         lambda path: "Demo Regular (TrueType)",
     )
-    monkeypatch.setattr(inspect_module, "kind", lambda path: "TrueType")
+    monkeypatch.setattr(info_module, "kind", lambda path: "TrueType")
 
-    inspect_module.inspect(tmp_path)
+    info_module.show_info(tmp_path)
 
     assert capsys.readouterr().out == (
         f"{font}\n  Registry name: Demo Regular (TrueType)\n  Kind: TrueType\n"
     )
 
 
-def test_inspect_reports_when_no_fonts_are_found(
+def test_info_reports_when_no_fonts_are_found(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(inspect_module, "find", lambda source: iter([]))
+    monkeypatch.setattr(info_module, "find", lambda source: iter([]))
 
-    inspect_module.inspect(tmp_path)
+    info_module.show_info(tmp_path)
 
     assert capsys.readouterr().out == f"No supported font files found in: {tmp_path}\n"
 

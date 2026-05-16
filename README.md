@@ -22,20 +22,20 @@ uv tool install git+https://github.com/Noai-oss/fonti
 
 Fonti provides a clean, 4-command CLI built with Typer:
 
-- `info`: Inspect font metadata before installing.
+- `info`: Show font metadata before installing.
 - `install`: Install font files locally or globally.
 - `ls`: List currently installed fonts.
 - `rm`: Remove installed fonts by referencing names, exact files, or regex filters.
 
-### Inspect (info)
+### info
 
-Inspect the registry name that Fonti will use:
+Show the registry name that Fonti will use:
 
 ```powershell
 fonti info <font-file-or-directory>
 ```
 
-### Install (install)
+### install
 
 Install a font file or all supported fonts under a directory:
 
@@ -47,7 +47,7 @@ fonti install <font-file-or-directory> --format ttf,otf
 fonti install <font-file-or-directory> -e 'Mono|Code' # Regex filtering
 ```
 
-### List (ls)
+### ls
 
 List installed fonts, suitable for pipeline integration:
 
@@ -57,7 +57,7 @@ fonti ls -g
 fonti ls 'Mono|Code'
 ```
 
-### Remove (rm)
+### rm
 
 Uninstall by exact registry name:
 

@@ -72,14 +72,14 @@ def test_install_cmd_forwards_cli_options(monkeypatch: pytest.MonkeyPatch) -> No
     ]
 
 
-def test_inspect_and_list_commands_forward_to_services(
+def test_info_and_list_commands_forward_to_services(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    inspect_calls: list[Path] = []
+    info_calls: list[Path] = []
     list_calls: list[tuple[bool, str | None]] = []
 
     monkeypatch.setattr(
-        cli_module, "inspect", lambda source: inspect_calls.append(source)
+        cli_module, "show_info", lambda source: info_calls.append(source)
     )
     monkeypatch.setattr(
         cli_module,
@@ -90,10 +90,10 @@ def test_inspect_and_list_commands_forward_to_services(
     )
 
     source = Path("fonts")
-    cli_module.inspect_cmd(source)
+    cli_module.info_cmd(source)
     cli_module.list_cmd(name_regex="mono", is_global=True)
 
-    assert inspect_calls == [source]
+    assert info_calls == [source]
     assert list_calls == [(True, "mono")]
 
 

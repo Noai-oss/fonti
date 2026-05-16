@@ -114,8 +114,7 @@ def test_install_skips_existing_target_without_force(
     target_path = target_dir / "Demo.ttf"
     target_path.write_text("existing bytes")
 
-    registry_values: list[tuple[str, str]] = []
-    add_calls: list[Path] = []
+    broadcasts: list[bool] = []
 
     monkeypatch.setattr(
         install_module,
@@ -134,27 +133,23 @@ def test_install_skips_existing_target_without_force(
     monkeypatch.setattr(
         install_module.winreg,
         "CreateKeyEx",
-        lambda *args: FakeRegistryKey(),
-    )
-    monkeypatch.setattr(
-        install_module.winreg,
-        "SetValueEx",
-        lambda key, name, reserved, value_type, value: registry_values.append(
-            (name, value)
-        ),
+        lambda *args: pytest.fail("registry should not be opened for skipped fonts"),
     )
     monkeypatch.setattr(
         install_module,
         "add_font_resource",
-        lambda path: add_calls.append(path) or 1,
+        lambda path: pytest.fail("skipped fonts should not be activated"),
     )
-    monkeypatch.setattr(install_module, "broadcast_font_change", lambda: None)
+    monkeypatch.setattr(
+        install_module,
+        "broadcast_font_change",
+        lambda: broadcasts.append(True),
+    )
 
     install_module.install(source_font)
 
     assert target_path.read_text() == "existing bytes"
-    assert registry_values == []
-    assert add_calls == []
+    assert broadcasts == []
     assert f"Skip existing file: {target_path}" in capsys.readouterr().out
 
 
@@ -203,6 +198,7 @@ def test_install_reports_when_no_fonts_match(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     source_dir = tmp_path / "source"
+    target_dir = tmp_path / "installed"
     source_dir.mkdir()
     (source_dir / "Demo.woff").write_text("unsupported")
     broadcasts: list[bool] = []
@@ -213,13 +209,13 @@ def test_install_reports_when_no_fonts_match(
         lambda: install_module.WIN10_1809_BUILD,
     )
     monkeypatch.setattr(
-        install_module, "get_font_install_dir", lambda is_global: tmp_path
+        install_module, "get_font_install_dir", lambda is_global: target_dir
     )
     monkeypatch.setattr(install_module, "get_registry_root", lambda is_global: "HKCU")
     monkeypatch.setattr(
         install_module.winreg,
         "CreateKeyEx",
-        lambda *args: FakeRegistryKey(),
+        lambda *args: pytest.fail("registry should not be opened without matches"),
     )
     monkeypatch.setattr(
         install_module,
@@ -229,6 +225,7 @@ def test_install_reports_when_no_fonts_match(
 
     install_module.install(source_dir)
 
+    assert not target_dir.exists()
     assert broadcasts == []
     assert f"No valid/matching font files found in: {source_dir}" in (
         capsys.readouterr().out

@@ -7,7 +7,7 @@ from typing import Annotated
 import click
 import typer
 
-from fonti.inspect import inspect
+from fonti.info import show_info
 from fonti.install import install
 from fonti.ls import list_installed_fonts
 from fonti.uninstall import (
@@ -65,11 +65,11 @@ app = typer.Typer(
 
 
 @app.command("info")
-def inspect_cmd(
+def info_cmd(
     source: Annotated[Path, typer.Argument(help="Font file or directory")],
 ) -> None:
-    """Inspect font registry names."""
-    inspect(source)
+    """Show font registry names."""
+    show_info(source)
 
 
 @app.command("install")

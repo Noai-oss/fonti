@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 import shutil
 import winreg
 from pathlib import Path
@@ -43,25 +44,20 @@ def install(
     font_install_dir = get_font_install_dir(is_global)
     registry_root = get_registry_root(is_global)
 
-    if not is_global:
-        font_install_dir.mkdir(parents=True, exist_ok=True)
-
     font_files = select(
         find(source),
         name_regex=name_regex,
         formats=formats,
     )
 
-    any_installed = False
+    any_matched = False
+    any_registered = False
 
-    with winreg.CreateKeyEx(
-        registry_root,
-        FONT_REGISTRY_PATH,
-        0,
-        winreg.KEY_SET_VALUE,
-    ) as key:
+    with ExitStack() as stack:
+        key = None
+
         for font_file in font_files:
-            any_installed = True
+            any_matched = True
             font_file = font_file.resolve()
             font_name = reg_name(font_file)
             target_path = font_install_dir / font_file.name
@@ -77,10 +73,33 @@ def install(
                     print(f"Skip existing file: {target_path}")
                     continue
 
+                if not is_global:
+                    font_install_dir.mkdir(parents=True, exist_ok=True)
+
+                if key is None:
+                    key = stack.enter_context(
+                        winreg.CreateKeyEx(
+                            registry_root,
+                            FONT_REGISTRY_PATH,
+                            0,
+                            winreg.KEY_SET_VALUE,
+                        )
+                    )
+
                 shutil.copy2(font_file, target_path)
+            elif key is None:
+                key = stack.enter_context(
+                    winreg.CreateKeyEx(
+                        registry_root,
+                        FONT_REGISTRY_PATH,
+                        0,
+                        winreg.KEY_SET_VALUE,
+                    )
+                )
 
             registry_value = get_registry_value_data(target_path, is_global)
             winreg.SetValueEx(key, font_name, 0, winreg.REG_SZ, registry_value)
+            any_registered = True
 
             added = add_font_resource(target_path)
             print(f"Installed persistently: {font_name}")
@@ -92,8 +111,9 @@ def install(
             else:
                 print(f"  Immediate activation: ok ({added})")
 
-    if not any_installed:
+    if not any_matched:
         print(f"No valid/matching font files found in: {source}")
         return
 
-    broadcast_font_change()
+    if any_registered:
+        broadcast_font_change()

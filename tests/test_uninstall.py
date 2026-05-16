@@ -44,9 +44,12 @@ def test_uninstall_font_targets_removes_file_registry_and_broadcasts(
     font_path = tmp_path / "Demo.ttf"
     font_path.write_text("font bytes")
     target = uninstall_module.UninstallTarget("Demo Regular (TrueType)", font_path)
-    deleted_values: list[str] = []
-    removed_resources: list[Path] = []
-    broadcasts: list[bool] = []
+    events: list[tuple[str, object]] = []
+    original_unlink = Path.unlink
+
+    def record_unlink(self: Path) -> None:
+        events.append(("unlink", self))
+        original_unlink(self)
 
     monkeypatch.setattr(uninstall_module, "get_registry_root", lambda is_global: "HKCU")
     monkeypatch.setattr(
@@ -57,26 +60,56 @@ def test_uninstall_font_targets_removes_file_registry_and_broadcasts(
     monkeypatch.setattr(
         uninstall_module.winreg,
         "DeleteValue",
-        lambda key, name: deleted_values.append(name),
+        lambda key, name: events.append(("delete", name)),
     )
     monkeypatch.setattr(
         uninstall_module,
         "remove_font_resource",
-        lambda path: removed_resources.append(path) or True,
+        lambda path: events.append(("remove", path)) or True,
     )
     monkeypatch.setattr(
         uninstall_module,
         "broadcast_font_change",
-        lambda: broadcasts.append(True),
+        lambda: events.append(("broadcast", None)),
     )
+    monkeypatch.setattr(Path, "unlink", record_unlink)
 
     uninstall_module.uninstall_font_targets([target], is_global=False)
 
     assert not font_path.exists()
-    assert deleted_values == ["Demo Regular (TrueType)"]
-    assert removed_resources == [font_path]
-    assert broadcasts == [True]
+    assert events == [
+        ("remove", font_path),
+        ("unlink", font_path),
+        ("delete", "Demo Regular (TrueType)"),
+        ("broadcast", None),
+    ]
     assert "Uninstalled: Demo Regular (TrueType)" in capsys.readouterr().out
+
+
+def test_uninstall_warns_when_immediate_deactivation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    font_path = tmp_path / "Demo.ttf"
+    font_path.write_text("font bytes")
+    target = uninstall_module.UninstallTarget("Demo Regular (TrueType)", font_path)
+
+    monkeypatch.setattr(uninstall_module, "get_registry_root", lambda is_global: "HKCU")
+    monkeypatch.setattr(
+        uninstall_module.winreg,
+        "OpenKey",
+        lambda *args: FakeRegistryKey(),
+    )
+    monkeypatch.setattr(uninstall_module.winreg, "DeleteValue", lambda *args: None)
+    monkeypatch.setattr(uninstall_module, "remove_font_resource", lambda path: False)
+    monkeypatch.setattr(uninstall_module, "broadcast_font_change", lambda: None)
+
+    uninstall_module.uninstall_font_targets([target], is_global=False)
+
+    assert "Immediate deactivation: failed; reboot may be required." in (
+        capsys.readouterr().out
+    )
 
 
 def test_uninstall_font_targets_noops_for_empty_targets(
