@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 import winreg
 from pathlib import Path
@@ -39,14 +40,101 @@ def inspect_fonts(source: Path) -> None:
         print(f"  Kind: {get_font_kind(font_file)}")
 
 
-def list_installed_fonts(is_global: bool = False) -> None:
-    """Print a list of all currently installed fonts for the defined scope."""
+def normalize_formats(formats: list[str] | None = None) -> set[str]:
+    """Normalize parsed font formats for filtering."""
+    if formats:
+        return {font_format.casefold().removeprefix(".") for font_format in formats}
+
+    return set()
+
+
+def compile_name_regex(name_regex: str) -> re.Pattern[str]:
+    """Compile a case-insensitive name regex with a CLI-friendly error."""
+    try:
+        return re.compile(name_regex, re.IGNORECASE)
+    except re.error as exc:
+        raise SystemExit(f"Error: Invalid --name-regex: {exc}") from exc
+
+
+def list_installed_fonts(
+    is_global: bool = False,
+    name_regex: str | None = None,
+    formats: list[str] | None = None,
+) -> None:
+    """Print a list of installed fonts for the defined scope and filters."""
     scope = "global" if is_global else "user"
     print(f"Scope: {scope}")
     print("-" * 100)
 
-    for name, value, _ in iter_font_registry(is_global):
+    matches = get_installed_font_matches(
+        is_global=is_global,
+        name_regex=name_regex,
+        formats=formats,
+    )
+
+    if not matches:
+        print("No installed fonts matched.")
+        return
+
+    for name, value, _ in matches:
         print(f"{name} | {value}")
+
+
+def filter_font_files(
+    font_files: list[Path],
+    name_regex: str | None = None,
+    formats: list[str] | None = None,
+) -> list[Path]:
+    """Filter font files by extension and file/registry name."""
+    allowed_formats = normalize_formats(formats)
+
+    if allowed_formats:
+        font_files = [
+            font_file
+            for font_file in font_files
+            if font_file.suffix.casefold().removeprefix(".") in allowed_formats
+        ]
+
+    if not name_regex:
+        return font_files
+
+    pattern = compile_name_regex(name_regex)
+
+    return [
+        font_file
+        for font_file in font_files
+        if pattern.search(font_file.name)
+        or pattern.search(get_font_registry_name(font_file))
+    ]
+
+
+def get_installed_font_matches(
+    is_global: bool = False,
+    name_regex: str | None = None,
+    formats: list[str] | None = None,
+) -> list[tuple[str, str, Path]]:
+    """Return installed fonts matching registry/file name and format filters."""
+    allowed_formats = normalize_formats(formats)
+    pattern = compile_name_regex(name_regex) if name_regex else None
+    matches: list[tuple[str, str, Path]] = []
+
+    for name, value, _ in iter_font_registry(is_global):
+        installed_path = get_abs_registry_font_path(value, is_global)
+
+        if allowed_formats:
+            installed_format = installed_path.suffix.casefold().removeprefix(".")
+
+            if installed_format not in allowed_formats:
+                continue
+
+        if pattern and not (
+            pattern.search(name) or pattern.search(installed_path.name)
+        ):
+            continue
+
+        matches.append((name, value, installed_path))
+
+    return matches
 
 
 def ensure_font_file_removable(font_path: Path, font_name: str) -> None:
@@ -64,7 +152,34 @@ def ensure_font_file_removable(font_path: Path, font_name: str) -> None:
         ) from exc
 
 
-def install_fonts(source: Path, is_global: bool = False, force: bool = False) -> None:
+def uninstall_font_matches(matches: list[tuple[str, Path]], is_global: bool) -> None:
+    """Uninstall pre-matched registry names and font files."""
+    for name, installed_path in matches:
+        ensure_font_file_removable(installed_path, name)
+
+    reg_root = get_reg_root(is_global)
+
+    with winreg.OpenKey(reg_root, FONT_REG_PATH, 0, winreg.KEY_ALL_ACCESS) as key:
+        for name, installed_path in matches:
+            remove_font_resource(installed_path)
+            winreg.DeleteValue(key, name)
+
+            if installed_path.exists():
+                installed_path.unlink()
+
+            print(f"Uninstalled: {name}")
+            print(f"  File: {installed_path}")
+
+    broadcast_font_change()
+
+
+def install_fonts(
+    source: Path,
+    is_global: bool = False,
+    force: bool = False,
+    name_regex: str | None = None,
+    formats: list[str] | None = None,
+) -> None:
     """Copy fonts, register them in Windows, and broadcast the update."""
     build_number = get_windows_build_number()
 
@@ -87,6 +202,12 @@ def install_fonts(source: Path, is_global: bool = False, force: bool = False) ->
 
     if not font_files:
         print(f"No supported font files found in: {source}")
+        return
+
+    font_files = filter_font_files(font_files, name_regex=name_regex, formats=formats)
+
+    if not font_files:
+        print(f"No fonts matched filters in: {source}")
         return
 
     with winreg.CreateKeyEx(reg_root, FONT_REG_PATH, 0, winreg.KEY_SET_VALUE) as key:
@@ -188,20 +309,24 @@ def uninstall_by_file(file: Path, is_global: bool = False) -> None:
     if not matches:
         raise SystemExit(f"No installed font matched file: {file}")
 
-    for name, installed_path in matches:
-        ensure_font_file_removable(installed_path, name)
+    uninstall_font_matches(matches, is_global)
 
-    reg_root = get_reg_root(is_global)
 
-    with winreg.OpenKey(reg_root, FONT_REG_PATH, 0, winreg.KEY_ALL_ACCESS) as key:
-        for name, installed_path in matches:
-            remove_font_resource(installed_path)
-            winreg.DeleteValue(key, name)
+def uninstall_by_filters(
+    name_regex: str | None = None,
+    is_global: bool = False,
+) -> None:
+    """Uninstall installed fonts matching registry/file name filters."""
+    if not name_regex:
+        raise SystemExit("Error: uninstall filters require --name-regex.")
 
-            if installed_path.exists():
-                installed_path.unlink()
+    matched_fonts = get_installed_font_matches(
+        is_global=is_global,
+        name_regex=name_regex,
+    )
+    matches = [(name, installed_path) for name, _, installed_path in matched_fonts]
 
-            print(f"Uninstalled: {name}")
-            print(f"  File: {installed_path}")
+    if not matches:
+        raise SystemExit("No installed fonts matched filters.")
 
-    broadcast_font_change()
+    uninstall_font_matches(matches, is_global)
