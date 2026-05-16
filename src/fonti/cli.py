@@ -1,253 +1,204 @@
 from __future__ import annotations
 
-import argparse
-import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Annotated
 
-if sys.platform != "win32":
-    raise SystemExit("Error: This tool is only supported on Windows.")
+import click
+import typer
 
-from fonti.windows import is_admin
-from fonti.operations import (
-    inspect_fonts,
-    install_fonts,
-    list_installed_fonts,
-    uninstall_by_file,
+from fonti.inspect import inspect
+from fonti.install import install
+from fonti.ls import list_installed_fonts
+from fonti.uninstall import (
+    UninstallTarget,
+    resolve_uninstall_target,
     uninstall_by_filters,
-    uninstall_by_registry_name,
+    uninstall_font_targets,
 )
+from fonti.win.env import is_admin
+
 
 FONT_FORMATS = ("ttf", "otf", "ttc", "otc")
 
 
-def parse_font_formats(value: str) -> list[str]:
-    """Parse a comma-separated list of font formats for argparse."""
+def parse_opts(values: Sequence[str] | None) -> list[str] | None:
+    """Parse comma-separated and repeated --format option values."""
+    if not values:
+        return None
+
     formats: list[str] = []
     invalid: list[str] = []
 
-    for item in value.split(","):
-        font_format = item.strip().lower().removeprefix(".")
+    for value in values:
+        for item in value.split(","):
+            font_format = item.strip().lower().removeprefix(".")
 
-        if not font_format:
-            continue
+            if not font_format:
+                continue
 
-        if font_format not in FONT_FORMATS:
-            invalid.append(font_format)
-            continue
+            if font_format not in FONT_FORMATS:
+                invalid.append(font_format)
+                continue
 
-        formats.append(font_format)
+            if font_format not in formats:
+                formats.append(font_format)
 
     if invalid:
         allowed = ", ".join(FONT_FORMATS)
-        raise argparse.ArgumentTypeError(
+        raise click.BadParameter(
             f"unsupported font format: {', '.join(invalid)} (choose from: {allowed})"
         )
 
     if not formats:
-        raise argparse.ArgumentTypeError("expected at least one font format")
+        raise click.BadParameter("expected at least one font format")
 
     return formats
 
 
-class FontFormatAction(argparse.Action):
-    """Collect comma-separated or repeated --format values into one list."""
-
-    def __call__(
-        self,
-        parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        values: str | Sequence[Any] | None,
-        option_string: str | None = None,
-    ) -> None:
-        if not isinstance(values, str):
-            raise argparse.ArgumentError(self, f"{option_string} expects a value")
-
-        try:
-            parsed_formats = parse_font_formats(values)
-        except argparse.ArgumentTypeError as exc:
-            raise argparse.ArgumentError(self, str(exc)) from exc
-
-        formats = list(getattr(namespace, self.dest, None) or [])
-
-        for font_format in parsed_formats:
-            if font_format not in formats:
-                formats.append(font_format)
-
-        setattr(namespace, self.dest, formats)
+app = typer.Typer(
+    name="fonti",
+    help="fonti: a command-line font installer for Windows",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 
-def add_font_filter_arguments(
-    command_parser: argparse.ArgumentParser,
-    action: str,
-    *,
-    include_format: bool = True,
-    match_file_name: bool = True,
+@app.command("info")
+def inspect_cmd(
+    source: Annotated[Path, typer.Argument(help="Font file or directory")],
 ) -> None:
-    """Add shared font filtering arguments to a subcommand parser."""
-    name_target = (
-        "file name, including extension, or registry name"
-        if match_file_name
-        else "registry name"
-    )
-    command_parser.add_argument(
-        "--name-regex",
-        help=(
-            f"Only {action} fonts whose {name_target} matches this regex. "
-            "Matching is case-insensitive."
+    """Inspect font registry names."""
+    inspect(source)
+
+
+@app.command("install")
+def install_cmd(
+    source: Annotated[Path, typer.Argument(help="Font file or directory")],
+    is_global: Annotated[
+        bool,
+        typer.Option(
+            "--global",
+            "-g",
+            help="Install for all users. Requires admin privileges.",
         ),
-    )
-
-    if not include_format:
-        return
-
-    command_parser.add_argument(
-        "--format",
-        action=FontFormatAction,
-        dest="formats",
-        metavar="FORMAT[,FORMAT...]",
-        help=(
-            f"Only {action} fonts with these formats. Use commas or repeat the option."
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Overwrite existing font files."),
+    ] = False,
+    name_regex: Annotated[
+        str | None,
+        typer.Option(
+            "--name-regex",
+            "-e",
+            help=(
+                "Only install fonts whose file name, including extension, "
+                "or registry name matches this regex. Matching is case-insensitive."
+            ),
         ),
+    ] = None,
+    formats: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--format",
+            callback=parse_opts,
+            metavar="FORMAT[,FORMAT...]",
+            help="Only install fonts with these formats. Use commas or repeat the option.",
+        ),
+    ] = None,
+) -> None:
+    """Install fonts."""
+    install(
+        source,
+        is_global=is_global,
+        force=force,
+        name_regex=name_regex,
+        formats=formats,
     )
 
 
-def main() -> None:
-    """CLI entry point. Parses arguments and routes to operations."""
-    parser = argparse.ArgumentParser(
-        prog="fonti",
-        description="A command-line font installer for Windows.",
-    )
+@app.command("ls")
+def list_cmd(
+    name_regex: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Optional regex to filter fonts by registry name. "
+                "Matching is case-insensitive."
+            ),
+        ),
+    ] = None,
+    is_global: Annotated[
+        bool,
+        typer.Option(
+            "--global",
+            "-g",
+            help="List global fonts from HKLM instead of user fonts from HKCU.",
+        ),
+    ] = False,
+) -> None:
+    """List installed fonts."""
+    list_installed_fonts(is_global=is_global, name_regex=name_regex)
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    inspect_parser = subparsers.add_parser(
-        "inspect", help="Inspect font registry names"
-    )
-    inspect_parser.add_argument("source", type=Path, help="Font file or directory")
+@app.command("rm")
+def uninstall_cmd(
+    targets: Annotated[
+        list[str] | None,
+        typer.Argument(help="Registry font names or files to uninstall."),
+    ] = None,
+    is_global: Annotated[
+        bool,
+        typer.Option(
+            "--global",
+            "-g",
+            help="Uninstall from global fonts. Requires admin privileges.",
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Confirm operations that may remove multiple fonts (like regex).",
+        ),
+    ] = False,
+    name_regex: Annotated[
+        str | None,
+        typer.Option(
+            "--name-regex",
+            "-e",
+            help=(
+                "Only uninstall fonts whose registry name matches this regex. "
+                "Matching is case-insensitive."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Uninstall fonts."""
+    if is_global and not is_admin():
+        raise SystemExit("Error: Global font uninstall requires admin privileges.")
 
-    install_parser = subparsers.add_parser("install", help="Install fonts")
-    install_parser.add_argument("source", type=Path, help="Font file or directory")
-    install_parser.add_argument(
-        "--global",
-        action="store_true",
-        dest="is_global",
-        help="Install for all users. Requires admin privileges.",
-    )
-    install_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite existing font files.",
-    )
-    add_font_filter_arguments(install_parser, "install")
+    if not targets and not name_regex:
+        raise SystemExit(
+            "Error: rm requires at least one target or a --name-regex (-e)."
+        )
 
-    list_parser = subparsers.add_parser("list", help="List installed fonts")
-    list_parser.add_argument(
-        "--global",
-        action="store_true",
-        dest="is_global",
-        help="List global fonts from HKLM instead of user fonts from HKCU.",
-    )
-    add_font_filter_arguments(
-        list_parser,
-        "list",
-        include_format=False,
-        match_file_name=False,
-    )
-
-    uninstall_parser = subparsers.add_parser("uninstall", help="Uninstall fonts")
-    uninstall_parser.add_argument(
-        "name",
-        nargs="?",
-        help="Registry font name, e.g. 'Cascadia Mono Bold (TrueType)'",
-    )
-    uninstall_parser.add_argument(
-        "--file",
-        type=Path,
-        help="Uninstall by installed font filename/path, useful for long TTC registry names.",
-    )
-    uninstall_parser.add_argument(
-        "--global",
-        action="store_true",
-        dest="is_global",
-        help="Uninstall from global fonts. Requires admin privileges.",
-    )
-    uninstall_parser.add_argument(
-        "--yes",
-        action="store_true",
-        help="Confirm filtered uninstall operations that may remove multiple fonts.",
-    )
-    add_font_filter_arguments(
-        uninstall_parser,
-        "uninstall",
-        include_format=False,
-        match_file_name=False,
-    )
-
-    args = parser.parse_args()
-
-    match args.command:
-        case "inspect":
-            inspect_fonts(args.source)
-
-        case "install":
-            install_fonts(
-                args.source,
-                is_global=args.is_global,
-                force=args.force,
-                name_regex=args.name_regex,
-                formats=args.formats,
+    if name_regex:
+        if not yes:
+            raise SystemExit(
+                "Error: Filtered uninstall can remove multiple fonts. "
+                "Preview with matching `fonti ls` filters, then re-run with -y / --yes."
             )
+        uninstall_by_filters(name_regex=name_regex, is_global=is_global)
 
-        case "list":
-            list_installed_fonts(
-                is_global=args.is_global,
-                name_regex=args.name_regex,
-            )
+    if targets:
+        resolved_targets: list[UninstallTarget] = []
+        for token in targets:
+            found = list(resolve_uninstall_target(token, is_global=is_global))
+            if not found:
+                raise SystemExit(f"Error: No installed font matched '{token}'.")
+            resolved_targets.extend(found)
 
-        case "uninstall":
-            if args.is_global and not is_admin():
-                raise SystemExit(
-                    "Error: Global font uninstall requires admin privileges."
-                )
-
-            has_filters = bool(args.name_regex)
-            target_count = sum(
-                bool(target) for target in (args.file, args.name, has_filters)
-            )
-
-            if target_count > 1:
-                raise SystemExit(
-                    "Error: Choose only one uninstall target: "
-                    "registry name, --file, or filters."
-                )
-
-            if has_filters:
-                if not args.yes:
-                    raise SystemExit(
-                        "Error: Filtered uninstall can remove multiple fonts. "
-                        "Preview with matching `fonti list` filters, "
-                        "then re-run with --yes."
-                    )
-
-                uninstall_by_filters(
-                    name_regex=args.name_regex,
-                    is_global=args.is_global,
-                )
-            elif args.file:
-                uninstall_by_file(args.file, is_global=args.is_global)
-            elif args.name:
-                uninstall_by_registry_name(args.name, is_global=args.is_global)
-            else:
-                raise SystemExit(
-                    "Error: uninstall requires a registry name, --file, "
-                    "or --name-regex."
-                )
-
-        case _:
-            parser.print_help()
-
-
-if __name__ == "__main__":
-    main()
+        uninstall_font_targets(resolved_targets, is_global=is_global)
