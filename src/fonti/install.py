@@ -96,11 +96,18 @@ def install_one(source: Path, *, system: bool, replace: bool) -> bool:
             )
 
     print(f"Installed: {name}")
-    if not add_font_resource(target):
-        print(
-            f"Warning: '{target}' is installed. Immediate activation failed; a restart may be required.",
-            file=sys.stderr,
-        )
+    if not other_names:
+        try:
+            if not add_font_resource(target):
+                print(
+                    f"Warning: Immediate activation failed for '{target}'; a restart may be required.",
+                    file=sys.stderr,
+                )
+        except OSError as exc:
+            print(
+                f"Warning: Immediate activation failed for '{target}': {exc}. A restart may be required.",
+                file=sys.stderr,
+            )
     return True
 
 

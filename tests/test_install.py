@@ -150,6 +150,27 @@ def test_immediate_activation_failure_is_a_warning(windows, monkeypatch, capsys)
     assert "Immediate activation failed" in capsys.readouterr().err
 
 
+def test_gdi_error_after_registration_is_a_warning(windows, monkeypatch, capsys):
+    def fail(path):
+        raise OSError("GDI unavailable")
+
+    monkeypatch.setattr(installer, "add_font_resource", fail)
+    assert main(["install", str(windows.source)]) == 0
+    assert windows.target.exists() and windows.values
+    assert windows.broadcasts == [True]
+    assert "GDI unavailable" in capsys.readouterr().err
+
+
+def test_registering_another_name_for_same_bytes_does_not_reactivate(windows):
+    w = windows
+    w.target.parent.mkdir()
+    w.target.write_bytes(w.source.read_bytes())
+    w.values["Existing name"] = str(w.target)
+    assert main(["install", str(w.source)]) == 0
+    assert w.values == {"Existing name": str(w.target), "Demo": str(w.target)}
+    assert not w.activated
+
+
 def test_system_install_requires_admin_and_registers_filename(
     windows, monkeypatch, capsys
 ):
