@@ -36,8 +36,7 @@ def install_cmd(
     ] = False,
 ) -> None:
     """Install one or more font files or directories."""
-    for path in paths:
-        install(path, is_global=system, force=replace)
+    install(paths, system=system, replace=replace)
 
 
 @app.command("list")

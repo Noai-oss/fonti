@@ -1,232 +1,197 @@
-from __future__ import annotations
-
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-import fonti.install as install_module
+import fonti.install as installer
+from fonti.__main__ import main
+from fonti.ls import InstalledFont
 
 
-class FakeRegistryKey:
-    def __enter__(self) -> "FakeRegistryKey":
-        return self
-
-    def __exit__(self, *exc_info: object) -> None:
-        return None
-
-
-def test_install_copies_registers_activates_and_broadcasts(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    source_dir = tmp_path / "source"
-    source_dir.mkdir()
-    source_font = source_dir / "Demo.ttf"
-    source_font.write_text("font bytes")
-    target_dir = tmp_path / "installed"
-    target_path = target_dir / "Demo.ttf"
-
-    registry_values: list[tuple[str, str]] = []
-    add_calls: list[Path] = []
-    broadcast_calls: list[bool] = []
-
+@pytest.fixture
+def windows(monkeypatch, tmp_path):
+    target = tmp_path / "installed"
+    values = {}
+    activated, deactivated, broadcasts = [], [], []
+    source = tmp_path / "Demo.ttf"
+    source.write_bytes(b"font bytes")
     monkeypatch.setattr(
-        install_module,
-        "get_windows_build_number",
-        lambda: install_module.WIN10_1809_BUILD,
+        installer, "get_windows_build_number", lambda: installer.WIN10_1809_BUILD
     )
+    monkeypatch.setattr(installer, "get_font_install_dir", lambda system: target)
+    monkeypatch.setattr(installer, "reg_name", lambda file: file.stem)
     monkeypatch.setattr(
-        install_module, "get_font_install_dir", lambda is_global: target_dir
-    )
-    monkeypatch.setattr(install_module, "get_registry_root", lambda is_global: "HKCU")
-    monkeypatch.setattr(
-        install_module,
-        "reg_name",
-        lambda path: "Demo Regular (TrueType)",
-    )
-    monkeypatch.setattr(
-        install_module.winreg,
-        "CreateKeyEx",
-        lambda *args: FakeRegistryKey(),
-    )
-    monkeypatch.setattr(
-        install_module.winreg,
-        "SetValueEx",
-        lambda key, name, reserved, value_type, value: registry_values.append(
-            (name, value)
+        installer,
+        "find_installed_fonts",
+        lambda system: (
+            InstalledFont(
+                name,
+                value,
+                Path(value) if Path(value).is_absolute() else target / value,
+            )
+            for name, value in values.items()
         ),
     )
+    monkeypatch.setattr(installer.winreg, "CreateKeyEx", lambda *args: nullcontext())
     monkeypatch.setattr(
-        install_module,
-        "add_font_resource",
-        lambda path: add_calls.append(path) or 1,
-    )
-    monkeypatch.setattr(
-        install_module,
-        "broadcast_font_change",
-        lambda: broadcast_calls.append(True),
-    )
-
-    install_module.install(source_dir)
-
-    assert target_path.read_text() == "font bytes"
-    assert registry_values == [("Demo Regular (TrueType)", str(target_path))]
-    assert add_calls == [target_path]
-    assert broadcast_calls == [True]
-    assert "Installed persistently: Demo Regular (TrueType)" in capsys.readouterr().out
-
-
-def test_install_rejects_unsupported_scopes_before_side_effects(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(
-        install_module,
-        "get_windows_build_number",
-        lambda: install_module.WIN10_1809_BUILD - 1,
-    )
-
-    with pytest.raises(SystemExit, match="too old for user-level fonts"):
-        install_module.install(tmp_path, is_global=False)
-
-    monkeypatch.setattr(
-        install_module,
-        "get_windows_build_number",
-        lambda: install_module.WIN10_1809_BUILD,
-    )
-    monkeypatch.setattr(install_module, "is_admin", lambda: False)
-
-    with pytest.raises(SystemExit, match="requires admin privileges"):
-        install_module.install(tmp_path, is_global=True)
-
-
-def test_install_skips_existing_target_without_force(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    source_font = tmp_path / "source" / "Demo.ttf"
-    source_font.parent.mkdir()
-    source_font.write_text("new bytes")
-    target_dir = tmp_path / "installed"
-    target_dir.mkdir()
-    target_path = target_dir / "Demo.ttf"
-    target_path.write_text("existing bytes")
-
-    broadcasts: list[bool] = []
-
-    monkeypatch.setattr(
-        install_module,
-        "get_windows_build_number",
-        lambda: install_module.WIN10_1809_BUILD,
+        installer.winreg,
+        "SetValueEx",
+        lambda key, name, reserved, typ, value: values.update({name: value}),
     )
     monkeypatch.setattr(
-        install_module, "get_font_install_dir", lambda is_global: target_dir
-    )
-    monkeypatch.setattr(install_module, "get_registry_root", lambda is_global: "HKCU")
-    monkeypatch.setattr(
-        install_module,
-        "reg_name",
-        lambda path: "Demo Regular (TrueType)",
+        installer, "add_font_resource", lambda path: activated.append(path) or 1
     )
     monkeypatch.setattr(
-        install_module.winreg,
-        "CreateKeyEx",
-        lambda *args: pytest.fail("registry should not be opened for skipped fonts"),
+        installer, "remove_font_resource", lambda path: deactivated.append(path) or True
     )
     monkeypatch.setattr(
-        install_module,
-        "add_font_resource",
-        lambda path: pytest.fail("skipped fonts should not be activated"),
+        installer, "broadcast_font_change", lambda: broadcasts.append(True)
     )
-    monkeypatch.setattr(
-        install_module,
-        "broadcast_font_change",
-        lambda: broadcasts.append(True),
-    )
-
-    install_module.install(source_font)
-
-    assert target_path.read_text() == "existing bytes"
-    assert broadcasts == []
-    assert f"Skip existing file: {target_path}" in capsys.readouterr().out
-
-
-def test_install_reports_immediate_activation_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    source_font = tmp_path / "Demo.ttf"
-    source_font.write_text("font bytes")
-    target_dir = tmp_path / "installed"
-
-    monkeypatch.setattr(
-        install_module,
-        "get_windows_build_number",
-        lambda: install_module.WIN10_1809_BUILD,
-    )
-    monkeypatch.setattr(
-        install_module, "get_font_install_dir", lambda is_global: target_dir
-    )
-    monkeypatch.setattr(install_module, "get_registry_root", lambda is_global: "HKCU")
-    monkeypatch.setattr(
-        install_module,
-        "reg_name",
-        lambda path: "Demo Regular (TrueType)",
-    )
-    monkeypatch.setattr(
-        install_module.winreg,
-        "CreateKeyEx",
-        lambda *args: FakeRegistryKey(),
-    )
-    monkeypatch.setattr(install_module.winreg, "SetValueEx", lambda *args: None)
-    monkeypatch.setattr(install_module, "add_font_resource", lambda path: 0)
-    monkeypatch.setattr(install_module, "broadcast_font_change", lambda: None)
-
-    install_module.install(source_font)
-
-    assert "Immediate activation: failed; reboot may be required." in (
-        capsys.readouterr().out
+    return SimpleNamespace(
+        source=source,
+        target=target / source.name,
+        values=values,
+        activated=activated,
+        deactivated=deactivated,
+        broadcasts=broadcasts,
     )
 
 
-def test_install_reports_when_no_fonts_match(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    source_dir = tmp_path / "source"
-    target_dir = tmp_path / "installed"
-    source_dir.mkdir()
-    (source_dir / "Demo.woff").write_text("unsupported")
-    broadcasts: list[bool] = []
+def test_install_directory_and_overlapping_paths(windows, capsys):
+    w = windows
+    sub = w.source.parent / "nested"
+    sub.mkdir()
+    (sub / "Second.otf").write_bytes(b"another font")
+    assert main(["install", str(w.source.parent), str(w.source)]) == 0
+    assert w.target.read_bytes() == w.source.read_bytes()
+    assert w.values == {
+        "Demo": str(w.target),
+        "Second": str(w.target.with_name("Second.otf")),
+    }
+    assert set(w.activated) == {w.target, w.target.with_name("Second.otf")}
+    assert w.broadcasts == [True]
+    assert "Already installed: Demo" in capsys.readouterr().out
 
-    monkeypatch.setattr(
-        install_module,
-        "get_windows_build_number",
-        lambda: install_module.WIN10_1809_BUILD,
-    )
-    monkeypatch.setattr(
-        install_module, "get_font_install_dir", lambda is_global: target_dir
-    )
-    monkeypatch.setattr(install_module, "get_registry_root", lambda is_global: "HKCU")
-    monkeypatch.setattr(
-        install_module.winreg,
-        "CreateKeyEx",
-        lambda *args: pytest.fail("registry should not be opened without matches"),
-    )
-    monkeypatch.setattr(
-        install_module,
-        "broadcast_font_change",
-        lambda: broadcasts.append(True),
-    )
 
-    install_module.install(source_dir)
+def test_retry_after_registry_write_failure(windows, monkeypatch, capsys):
+    w = windows
 
-    assert not target_dir.exists()
-    assert broadcasts == []
-    assert f"No valid/matching font files found in: {source_dir}" in (
-        capsys.readouterr().out
-    )
+    def fail(*args):
+        raise PermissionError("test registry write denied")
+
+    with monkeypatch.context() as first:
+        first.setattr(installer.winreg, "SetValueEx", fail)
+        assert main(["install", str(w.source)]) == 1
+    assert str(w.source) in capsys.readouterr().err
+    assert w.target.read_bytes() == w.source.read_bytes()
+    assert not w.values
+    assert main(["install", str(w.source)]) == 0
+    assert w.values == {"Demo": str(w.target)}
+    assert main(["install", str(w.target)]) == 0
+    assert w.activated == [w.target]
+    assert w.broadcasts == [True]
+
+
+def test_conflict_requires_explicit_replace_even_for_same_length(windows, capsys):
+    w = windows
+    assert main(["install", str(w.source)]) == 0
+    old = w.target.read_bytes()
+    w.source.write_bytes(b"x" * len(old))
+    assert main(["install", str(w.source)]) == 1
+    assert "--replace" in capsys.readouterr().err
+    assert w.target.read_bytes() == old
+    assert main(["install", str(w.source), "--replace"]) == 0
+    assert w.target.read_bytes() == w.source.read_bytes()
+    assert w.deactivated == [w.target]
+
+
+def test_failed_replacement_preserves_previous_file(windows, monkeypatch, capsys):
+    w = windows
+    assert main(["install", str(w.source)]) == 0
+    original = w.target.read_bytes()
+    w.source.write_bytes(b"version two")
+
+    def fail(staged, destination):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(Path, "replace", fail)
+    assert main(["install", str(w.source), "--replace"]) == 1
+    assert "locked" in capsys.readouterr().err
+    assert w.target.read_bytes() == original
+    assert list(w.target.parent.iterdir()) == [w.target]
+    assert w.activated == [w.target, w.target]
+
+
+def test_registry_name_pointing_elsewhere_is_a_conflict(windows, capsys):
+    w = windows
+    other = w.target.with_name("other.ttf")
+    w.values["Demo"] = str(other)
+    assert main(["install", str(w.source), "--replace"]) == 1
+    assert str(other) in capsys.readouterr().err
+    assert not w.target.exists()
+    assert w.values == {"Demo": str(other)}
+
+
+def test_batch_reports_empty_input_and_broadcasts_completed_fonts(
+    windows, tmp_path, capsys
+):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert main(["install", str(windows.source), str(empty)]) == 1
+    assert str(empty) in capsys.readouterr().err
+    assert windows.broadcasts == [True]
+
+
+def test_immediate_activation_failure_is_a_warning(windows, monkeypatch, capsys):
+    monkeypatch.setattr(installer, "add_font_resource", lambda path: 0)
+    assert main(["install", str(windows.source)]) == 0
+    assert windows.values
+    assert "Immediate activation failed" in capsys.readouterr().err
+
+
+def test_gdi_error_after_registration_is_a_warning(windows, monkeypatch, capsys):
+    def fail(path):
+        raise OSError("GDI unavailable")
+
+    monkeypatch.setattr(installer, "add_font_resource", fail)
+    assert main(["install", str(windows.source)]) == 0
+    assert windows.target.exists() and windows.values
+    assert windows.broadcasts == [True]
+    assert "GDI unavailable" in capsys.readouterr().err
+
+
+def test_registering_another_name_for_same_bytes_does_not_reactivate(windows):
+    w = windows
+    w.target.parent.mkdir()
+    w.target.write_bytes(w.source.read_bytes())
+    w.values["Existing name"] = str(w.target)
+    assert main(["install", str(w.source)]) == 0
+    assert w.values == {"Existing name": str(w.target), "Demo": str(w.target)}
+    assert not w.activated
+
+
+def test_system_install_requires_admin_and_registers_filename(
+    windows, monkeypatch, capsys
+):
+    monkeypatch.setattr(installer, "is_admin", lambda: False)
+    assert main(["install", "--system", str(windows.source)]) == 1
+    assert "administrator" in capsys.readouterr().err
+    assert not windows.target.exists()
+    monkeypatch.setattr(installer, "is_admin", lambda: True)
+    assert main(["install", "--system", str(windows.source)]) == 0
+    assert windows.values == {"Demo": windows.target.name}
+
+
+def test_user_install_requires_supported_windows(windows, monkeypatch):
+    monkeypatch.setattr(installer, "get_windows_build_number", lambda: 10000)
+    assert main(["install", str(windows.source)]) == 1
+    assert not windows.target.exists()
+
+
+@pytest.mark.parametrize("command", ["install", "info"])
+def test_corrupt_input_reports_filename_and_fails(tmp_path, capsys, command):
+    source = tmp_path / "broken.ttf"
+    source.write_bytes(b"bad font")
+    assert main([command, str(source)]) == 1
+    assert str(source) in capsys.readouterr().err
