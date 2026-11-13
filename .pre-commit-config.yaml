@@ -4,7 +4,7 @@ default_install_hook_types:
 
 repos:
   - repo: https://github.com/crate-ci/typos
-    rev: v1.46.1
+    rev: v1.52.2
     hooks:
       - id: typos
         name: Check typos for files
@@ -15,7 +15,7 @@ repos:
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.15.12
+    rev: v0.17.5
     hooks:
       # Run the linter.
       - id: ruff-check
@@ -24,7 +24,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.4.0
+    rev: v4.5.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

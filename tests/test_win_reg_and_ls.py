@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Self
 
 import pytest
 
@@ -9,7 +10,7 @@ import fonti.win.reg as reg_module
 
 
 class FakeRegistryKey:
-    def __enter__(self) -> "FakeRegistryKey":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

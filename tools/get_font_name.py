@@ -1,6 +1,7 @@
-from fontTools.ttLib import TTFont
 import argparse
 from pathlib import Path
+
+from fontTools.ttLib import TTFont
 
 
 def get_font_names(font_path):

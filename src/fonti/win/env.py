@@ -19,5 +19,5 @@ def is_admin() -> bool:
     """Check if the current process has administrative privileges."""
     try:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
+    except (AttributeError, OSError):
         return False

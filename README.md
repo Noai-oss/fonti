@@ -7,7 +7,7 @@ Install a font file or a whole folder of fonts on Windows from PowerShell. Fonti
 With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, run this in PowerShell. Fonti requires Python 3.13 or later.
 
 ```powershell
-uv tool install --python 3.13 git+https://github.com/Noai-oss/fonti
+uv tool install git+https://github.com/Noai-oss/fonti
 ```
 
 If you have `CascadiaMono.ttf` in a local `fonts` folder, install it for your account and look it up.
