@@ -19,7 +19,7 @@ fonti info .\Regular.ttf
 
 - **install** accepts one or more paths and searches directories recursively. Use `--replace` to allow overwriting a file with different contents at the same filename.
 - **list** writes one installed name and filename per line, separated by a tab. Its optional keyword is a case-insensitive, literal substring of either field. An empty result is successful.
-- **remove** takes one or more exact installed names or filenames from `list`. Quote names that contain spaces.
+- **remove** takes one or more exact installed names or filenames from `list`. Quote names that contain spaces. All targets are resolved before removal. If a filename matches several entries, use the exact installed name. Files shared by other entries in the selected scope are kept. For fonts registered from outside that scope’s font directory, Fonti removes the registration and leaves the original file in place.
 - **info** prints the registry name and font kind for a file or directory.
 
 Commands operate on the current user's fonts by default. Add `--system` to install, list or remove system fonts. System installs and removals require an elevated shell. User installs require Windows 10 version 1809 or later.
