@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 import fonti.uninstall as uninstall_module
-from fonti.ls import InstalledFont
 
 
 class FakeRegistryKey:
@@ -186,56 +185,3 @@ def test_resolve_uninstall_target_returns_empty_for_missing_registry_name(
     monkeypatch.setattr(uninstall_module.winreg, "OpenKey", missing_key)
 
     assert list(uninstall_module.resolve_uninstall_target("Missing Regular")) == []
-
-
-def test_uninstall_by_filters_validates_matches(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with pytest.raises(SystemExit, match="require --name-regex"):
-        uninstall_module.uninstall_by_filters(None)
-
-    monkeypatch.setattr(
-        uninstall_module,
-        "find_installed_fonts",
-        lambda is_global=False, name_regex=None: iter([]),
-    )
-
-    with pytest.raises(SystemExit, match="No installed fonts matched filters"):
-        uninstall_module.uninstall_by_filters("missing")
-
-
-def test_uninstall_by_filters_delegates_matching_targets(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    font = InstalledFont(
-        "Demo Regular (TrueType)",
-        "Demo.ttf",
-        tmp_path / "Demo.ttf",
-    )
-    calls: list[tuple[list[uninstall_module.UninstallTarget], bool]] = []
-
-    monkeypatch.setattr(
-        uninstall_module,
-        "find_installed_fonts",
-        lambda is_global=False, name_regex=None: iter([font]),
-    )
-    monkeypatch.setattr(
-        uninstall_module,
-        "uninstall_font_targets",
-        lambda targets, is_global: calls.append((list(targets), is_global)),
-    )
-
-    uninstall_module.uninstall_by_filters("demo", is_global=True)
-
-    assert calls == [
-        (
-            [
-                uninstall_module.UninstallTarget(
-                    "Demo Regular (TrueType)",
-                    tmp_path / "Demo.ttf",
-                )
-            ],
-            True,
-        )
-    ]

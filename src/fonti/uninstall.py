@@ -5,7 +5,6 @@ import winreg
 from pathlib import Path
 from typing import NamedTuple
 
-from fonti.ls import find_installed_fonts
 from fonti.win.active import broadcast_font_change, remove_font_resource
 from fonti.win.reg import (
     FONT_REGISTRY_PATH,
@@ -109,22 +108,3 @@ def resolve_uninstall_target(
             yield UninstallTarget(token, font_path)
     except FileNotFoundError:
         pass
-
-
-def uninstall_by_filters(
-    name_regex: str | None = None,
-    is_global: bool = False,
-) -> None:
-    """Uninstall installed fonts matching registry name filters."""
-    if not name_regex:
-        raise SystemExit("Error: uninstall filters require --name-regex.")
-
-    def _iter_targets() -> Iterable[UninstallTarget]:
-        for font in find_installed_fonts(is_global=is_global, name_regex=name_regex):
-            yield UninstallTarget(font.name, font.path)
-
-    targets = list(_iter_targets())
-    if not targets:
-        raise SystemExit("No installed fonts matched filters.")
-
-    uninstall_font_targets(targets, is_global)
