@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from collections.abc import Iterator
+from pathlib import Path
 
 SUPPORTED_FONT_EXTENSIONS = {".ttf", ".otf", ".ttc", ".otc"}
 

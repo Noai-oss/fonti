@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-import fonti.cli as cli
+from fonti import cli
 from fonti.__main__ import main
 
 

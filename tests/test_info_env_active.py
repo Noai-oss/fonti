@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Self
 
 import pytest
 
@@ -11,7 +12,7 @@ import fonti.win.env as env_module
 
 
 class FakeRegistryKey:
-    def __enter__(self) -> "FakeRegistryKey":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

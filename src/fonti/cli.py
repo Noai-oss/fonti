@@ -8,7 +8,6 @@ from fonti.install import install
 from fonti.ls import list_installed_fonts
 from fonti.uninstall import remove
 
-
 app = typer.Typer(
     name="fonti",
     help="Install and manage Windows fonts. Start with: fonti install PATH",

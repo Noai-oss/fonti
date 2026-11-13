@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Self, cast
 
-from fontTools.ttLib import TTFont
 import pytest
+from fontTools.ttLib import TTFont
 
 import fonti.meta as meta_module
 
@@ -55,7 +55,7 @@ class CollectionContext:
     def __init__(self, fonts: list[FakeFont]) -> None:
         self.fonts = fonts
 
-    def __enter__(self) -> "CollectionContext":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

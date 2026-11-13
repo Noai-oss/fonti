@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import fonti.uninstall as uninstall
+from fonti import uninstall
 from fonti.__main__ import main
 from fonti.ls import InstalledFont
 
