@@ -108,7 +108,7 @@ def test_find_installed_fonts_filters_names(monkeypatch: pytest.MonkeyPatch) -> 
         lambda value, is_global: Path(value),
     )
 
-    assert list(ls_module.find_installed_fonts(name_regex="mono")) == [
+    assert list(ls_module.find_installed_fonts(keyword="mono")) == [
         ls_module.InstalledFont(
             "Mono Regular (TrueType)",
             r"C:\Fonts\Mono.ttf",
@@ -129,11 +129,9 @@ def test_list_installed_fonts_prints_pipeline_friendly_rows(
     monkeypatch.setattr(
         ls_module,
         "find_installed_fonts",
-        lambda is_global=False, name_regex=None: iter([font]),
+        lambda is_global=False, keyword="": iter([font]),
     )
 
-    ls_module.list_installed_fonts(name_regex="demo")
+    ls_module.list_installed_fonts(keyword="demo")
 
-    assert capsys.readouterr().out == (
-        "Demo Regular (TrueType)\tC:\\Fonts\\Demo.ttf\tC:\\Fonts\\Demo.ttf\n"
-    )
+    assert capsys.readouterr().out == ("Demo Regular (TrueType)\tDemo.ttf\n")

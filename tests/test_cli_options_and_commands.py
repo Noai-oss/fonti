@@ -1,161 +1,52 @@
-from __future__ import annotations
-
 from pathlib import Path
 
-import click
 import pytest
 
-import fonti.cli as cli_module
+import fonti.cli as cli
+from fonti.__main__ import main
 
 
-def test_parse_opts_accepts_commas_repeats_dots_and_case() -> None:
-    assert cli_module.parse_opts(["TTF,.otf", "ttf", " otc "]) == [
-        "ttf",
-        "otf",
-        "otc",
-    ]
+def test_help_exposes_the_four_commands(capsys):
+    assert main(["--help"]) == 0
+    help_text = capsys.readouterr().out
+    for command in ("install", "list", "remove", "info"):
+        assert command in help_text
 
 
-def test_parse_opts_returns_none_when_not_provided() -> None:
-    assert cli_module.parse_opts(None) is None
-    assert cli_module.parse_opts([]) is None
+@pytest.mark.parametrize(
+    "args", [["install"], ["remove"], ["info"], ["install", "--unknown"]]
+)
+def test_invalid_usage_fails_on_stderr(args, capsys):
+    assert main(args) == 2
+    assert capsys.readouterr().err
 
 
-def test_parse_opts_rejects_invalid_or_empty_values() -> None:
-    with pytest.raises(click.BadParameter, match="unsupported font format: woff"):
-        cli_module.parse_opts(["ttf,woff"])
-
-    with pytest.raises(click.BadParameter, match="expected at least one font format"):
-        cli_module.parse_opts([",", "  "])
-
-
-def test_install_cmd_forwards_cli_options(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict[str, object]] = []
-
-    def fake_install(
-        source: Path,
-        *,
-        is_global: bool,
-        force: bool,
-        name_regex: str | None,
-        formats: list[str] | None,
-    ) -> None:
-        calls.append(
-            {
-                "source": source,
-                "is_global": is_global,
-                "force": force,
-                "name_regex": name_regex,
-                "formats": formats,
-            }
-        )
-
-    monkeypatch.setattr(cli_module, "install", fake_install)
-
-    source = Path("fonts")
-    cli_module.install_cmd(
-        source,
-        is_global=True,
-        force=True,
-        name_regex="mono",
-        formats=["ttf", "otf"],
-    )
-
+def test_multiple_install_paths_and_flags(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "install", lambda path, **kw: calls.append((path, kw)))
+    assert main(["install", "a.ttf", "fonts", "--replace", "--system"]) == 0
     assert calls == [
-        {
-            "source": source,
-            "is_global": True,
-            "force": True,
-            "name_regex": "mono",
-            "formats": ["ttf", "otf"],
-        }
+        (Path(p), {"force": True, "is_global": True}) for p in ("a.ttf", "fonts")
     ]
 
 
-def test_info_and_list_commands_forward_to_services(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    info_calls: list[Path] = []
-    list_calls: list[tuple[bool, str | None]] = []
+def test_list_accepts_literal_keyword_and_scope(monkeypatch, capsys):
+    import fonti.ls as listing
 
+    entries = [("Display Name", "A.B.ttf", 1), ("AaB Regular", "Other.ttf", 1)]
     monkeypatch.setattr(
-        cli_module, "show_info", lambda source: info_calls.append(source)
+        listing, "iter_font_registry_values", lambda system: entries if system else []
     )
-    monkeypatch.setattr(
-        cli_module,
-        "list_installed_fonts",
-        lambda is_global=False, name_regex=None: list_calls.append(
-            (is_global, name_regex)
-        ),
-    )
-
-    source = Path("fonts")
-    cli_module.info_cmd(source)
-    cli_module.list_cmd(name_regex="mono", is_global=True)
-
-    assert info_calls == [source]
-    assert list_calls == [(True, "mono")]
+    assert main(["list", "a.b", "--system"]) == 0
+    assert capsys.readouterr().out == "Display Name\tA.B.ttf\n"
+    assert main(["list", "DISPLAY", "--system"]) == 0
+    assert capsys.readouterr().out == "Display Name\tA.B.ttf\n"
+    assert main(["list", "Display"]) == 0
+    assert capsys.readouterr().out == ""
 
 
-def test_uninstall_cmd_rejects_unsafe_requests(monkeypatch: pytest.MonkeyPatch) -> None:
-    with pytest.raises(SystemExit, match="requires at least one target"):
-        cli_module.uninstall_cmd(targets=None)
-
-    with pytest.raises(
-        SystemExit, match="Filtered uninstall can remove multiple fonts"
-    ):
-        cli_module.uninstall_cmd(targets=None, name_regex="mono")
-
-    monkeypatch.setattr(cli_module, "is_admin", lambda: False)
-
-    with pytest.raises(SystemExit, match="requires admin privileges"):
-        cli_module.uninstall_cmd(targets=["Demo"], is_global=True)
-
-
-def test_uninstall_cmd_resolves_targets_and_filters(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    target = cli_module.UninstallTarget(
-        "Demo Regular (TrueType)", tmp_path / "Demo.ttf"
-    )
-    filter_calls: list[tuple[str | None, bool]] = []
-    uninstall_calls: list[tuple[list[cli_module.UninstallTarget], bool]] = []
-
-    monkeypatch.setattr(cli_module, "is_admin", lambda: True)
-    monkeypatch.setattr(
-        cli_module,
-        "resolve_uninstall_target",
-        lambda token, is_global=False: [target] if token == "Demo.ttf" else [],
-    )
-    monkeypatch.setattr(
-        cli_module,
-        "uninstall_by_filters",
-        lambda name_regex=None, is_global=False: filter_calls.append(
-            (name_regex, is_global)
-        ),
-    )
-    monkeypatch.setattr(
-        cli_module,
-        "uninstall_font_targets",
-        lambda targets, is_global: uninstall_calls.append((list(targets), is_global)),
-    )
-
-    cli_module.uninstall_cmd(
-        targets=["Demo.ttf"],
-        is_global=True,
-        yes=True,
-        name_regex="mono",
-    )
-
-    assert filter_calls == [("mono", True)]
-    assert uninstall_calls == [([target], True)]
-
-
-def test_uninstall_cmd_fails_when_target_does_not_resolve(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(cli_module, "resolve_uninstall_target", lambda *args, **kw: [])
-
-    with pytest.raises(SystemExit, match="No installed font matched 'Missing.ttf'"):
-        cli_module.uninstall_cmd(targets=["Missing.ttf"])
+def test_info_delegates_the_path(monkeypatch):
+    paths = []
+    monkeypatch.setattr(cli, "show_info", paths.append)
+    assert main(["info", "Demo.ttf"]) == 0
+    assert paths == [Path("Demo.ttf")]
