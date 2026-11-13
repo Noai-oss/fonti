@@ -1,34 +1,72 @@
 # Fonti
 
-Install fonts on Windows from PowerShell. Fonti supports TrueType and OpenType files and collections (`.ttf`, `.otf`, `.ttc`, `.otc`).
+Install a font file or a whole folder of fonts on Windows from PowerShell. Fonti supports `.ttf`, `.otf`, `.ttc`, and `.otc` files.
+
+## Quick start
+
+With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, run this in PowerShell. Fonti requires Python 3.13 or later.
 
 ```powershell
-uv tool install git+https://github.com/Noai-oss/fonti
+uv tool install --python 3.13 git+https://github.com/Noai-oss/fonti
+```
+
+If you have `CascadiaMono.ttf` in a local `fonts` folder, install it for your account and look it up.
+
+```powershell
+fonti install .\fonts\CascadiaMono.ttf
+fonti list Cascadia
+```
+
+The two columns are the installed name and filename, separated by a tab.
+
+```text
+Cascadia Mono (TrueType)	CascadiaMono.ttf
+```
+
+## Installing fonts
+
+Pass a directory to include its subdirectories, or give several files in one command.
+
+```powershell
 fonti install .\fonts
+fonti install .\Regular.ttf .\Bold.ttf
 ```
 
-## Commands
+Current-user installs require Windows 10 version 1809 or later. To install for everyone, open PowerShell as administrator and use `--system`.
 
 ```powershell
-fonti install .\Regular.ttf .\Bold.ttf
 fonti install .\fonts --system
-fonti list 'Cascadia'
-fonti remove 'CascadiaMono-Bold.ttf'
-fonti info .\Regular.ttf
+fonti list --system
 ```
 
-- **install** accepts one or more paths and searches directories recursively. Use `--replace` to allow overwriting a file with different contents at the same filename.
-- **list** writes one installed name and filename per line, separated by a tab. Its optional keyword is a case-insensitive, literal substring of either field. An empty result is successful.
-- **remove** takes one or more exact installed names or filenames from `list`. Quote names that contain spaces. All targets are resolved before removal. If a filename matches several entries, use the exact installed name. Files shared by other entries in the selected scope are kept. For fonts registered from outside that scope’s font directory, Fonti removes the registration and leaves the original file in place.
-- **info** prints the registry name and font kind for a file or directory.
+You can rerun an install. Fonti skips identical, registered files and finishes registration if a previous run stopped after copying. Use `--replace` to overwrite a file with the same filename and different contents. If the font name already points to another file, use `list` to find the conflicting entry.
 
-Commands operate on the current user's fonts by default. Add `--system` to install, list or remove system fonts. System installs and removals require an elevated shell. User installs require Windows 10 version 1809 or later.
+## Inspecting and removing fonts
 
-Repeated installs skip identical, correctly registered files. If registration failed after copying, run the same command to finish installation. A filename conflict requires `--replace`; if the installed name belongs to another file, resolve the conflict with `list` and `remove` first.
+Use `info` on a file or directory to see the name Fonti will register. Use `list` to find installed fonts by name or filename. Its optional keyword is a case-insensitive, literal substring.
 
-Install exits with status 0 when all inputs are installed or already present. An input containing no supported fonts, a conflict, or a persistent installation failure returns a nonzero status and an error on stderr. A batch stops at the first error; completed fonts remain installed. Immediate activation is best effort: if Windows declines it, the persistent install still succeeds and Fonti prints a warning.
+```powershell
+fonti info .\fonts\CascadiaMono.ttf
+fonti list Mono
+```
+
+To uninstall a font, copy its exact filename or installed name from `list`. Quote names containing spaces.
+
+```powershell
+fonti remove 'CascadiaMono.ttf'
+```
+
+You can pass several targets. Fonti checks every target before removing any of them. If a filename is ambiguous, use the installed name. Files shared by other entries in the same scope and originals outside its font directory are preserved. To remove a system font, add `--system` in an elevated PowerShell window.
+
+## Using Fonti in scripts
+
+- `install` exits with code `0` when every input was installed or already present. A conflict, an input with no supported fonts, or a write failure stops the batch and returns a nonzero code. The error goes to stderr, and earlier successful installs remain in place.
+- If Windows cannot activate a font immediately, Fonti reports a warning. The file and registration are in place, and a restart may be needed before apps can use it.
+- `list` returns exit code `0` and prints nothing when its search has no matches.
 
 ## Development
+
+Run the test suite from a checkout on Windows.
 
 ```powershell
 uv sync --locked
