@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import click
 import pytest
 import typer
 
@@ -20,8 +19,8 @@ def test_main_returns_zero_when_app_completes(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(main_module, "app", fake_app)
 
-    assert main_module.main(["ls"]) == 0
-    assert calls == [("fonti", ["ls"], False)]
+    assert main_module.main(["list"]) == 0
+    assert calls == [("fonti", ["list"], True)]
 
 
 def test_main_maps_typer_exit_to_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,17 +32,9 @@ def test_main_maps_typer_exit_to_exit_code(monkeypatch: pytest.MonkeyPatch) -> N
     assert main_module.main(["--help"]) == 7
 
 
-def test_main_shows_click_errors(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    def fake_app(**kwargs: object) -> None:
-        raise click.UsageError("bad input")
-
-    monkeypatch.setattr(main_module, "app", fake_app)
-
-    assert main_module.main(["bad"]) == 2
-    assert "Error: bad input" in capsys.readouterr().err
+def test_main_reports_unknown_command(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main_module.main(["unknown-command"]) == 2
+    assert "unknown-command" in capsys.readouterr().err
 
 
 def test_main_maps_abort_or_keyboard_interrupt_to_130(
