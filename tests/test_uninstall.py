@@ -24,6 +24,18 @@ def windows(monkeypatch, tmp_path):
     monkeypatch.setattr(uninstall, "get_font_install_dir", lambda system: directory)
     monkeypatch.setattr(uninstall.winreg, "OpenKey", lambda *args: nullcontext())
     monkeypatch.setattr(
+        uninstall.winreg,
+        "QueryValueEx",
+        lambda key, name: (str(values[name]), uninstall.winreg.REG_SZ),
+    )
+    monkeypatch.setattr(
+        uninstall.winreg,
+        "SetValueEx",
+        lambda key, name, reserved, typ, value: values.update(
+            {name: type(path)(value)}
+        ),
+    )
+    monkeypatch.setattr(
         uninstall.winreg, "DeleteValue", lambda key, name: values.pop(name)
     )
     monkeypatch.setattr(
@@ -85,6 +97,19 @@ def test_missing_file_can_still_be_unregistered(windows):
     windows.path.unlink()
     assert main(["remove", "Demo.ttf"]) == 0
     assert not windows.values and not windows.removed
+
+
+def test_registry_failure_preserves_file_and_immediate_activation(
+    windows, monkeypatch, capsys
+):
+    def denied(key, name):
+        raise PermissionError("registration changed")
+
+    monkeypatch.setattr(uninstall.winreg, "DeleteValue", denied)
+    assert main(["remove", "Demo.ttf"]) == 1
+    assert "registration changed" in capsys.readouterr().err
+    assert windows.values and windows.path.exists()
+    assert not windows.removed
 
 
 def test_locked_file_reports_error_and_restores_activation(

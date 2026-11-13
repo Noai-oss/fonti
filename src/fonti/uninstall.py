@@ -10,7 +10,12 @@ from fonti.win.active import (
     remove_font_resource,
 )
 from fonti.win.env import is_admin
-from fonti.win.reg import FONT_REGISTRY_PATH, get_font_install_dir, get_registry_root
+from fonti.win.reg import (
+    FONT_REGISTRY_PATH,
+    get_font_install_dir,
+    get_registry_root,
+    resolve_registry_font_path,
+)
 
 
 def resolve_targets(
@@ -46,34 +51,47 @@ def remove(tokens: Sequence[str], *, system: bool = False) -> None:
     changed = False
     try:
         with winreg.OpenKey(
-            get_registry_root(system), FONT_REGISTRY_PATH, 0, winreg.KEY_SET_VALUE
+            get_registry_root(system),
+            FONT_REGISTRY_PATH,
+            0,
+            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE,
         ) as key:
             for font in targets:
                 path = font.path.resolve()
-                if references[path] == 1 and path.exists():
-                    deactivated = remove_font_resource(path)
-                    if (
-                        path.parent == directory
-                        and font.path.parent.resolve() == directory
-                    ):
-                        try:
-                            font.path.unlink()
-                        except OSError as exc:
-                            if deactivated:
-                                add_font_resource(path)
-                            raise OSError(
-                                f"Could not remove '{font.name}' at '{path}': {exc}"
-                            ) from exc
-                    if not deactivated:
-                        print(
-                            f"Warning: Immediate deactivation failed for '{font.name}'; a restart may be required.",
-                            file=sys.stderr,
-                        )
                 try:
+                    value, value_type = winreg.QueryValueEx(key, font.name)
+                    if (
+                        not isinstance(value, str)
+                        or resolve_registry_font_path(value, system).resolve() != path
+                    ):
+                        raise ValueError(
+                            f"Registration for '{font.name}' changed. Run 'fonti list' again."
+                        )
                     winreg.DeleteValue(key, font.name)
                 except OSError as exc:
                     raise OSError(
                         f"Could not remove registration for '{font.name}': {exc}"
+                    ) from exc
+                deactivated = False
+                try:
+                    if references[path] == 1 and path.exists():
+                        deactivated = remove_font_resource(path)
+                        if (
+                            path.parent == directory
+                            and font.path.parent.resolve() == directory
+                        ):
+                            font.path.unlink()
+                        if not deactivated:
+                            print(
+                                f"Warning: Immediate deactivation failed for '{font.name}'; a restart may be required.",
+                                file=sys.stderr,
+                            )
+                except OSError as exc:
+                    winreg.SetValueEx(key, font.name, 0, value_type, value)
+                    if deactivated:
+                        add_font_resource(path)
+                    raise OSError(
+                        f"Could not remove '{font.name}' at '{path}': {exc}"
                     ) from exc
                 references[path] -= 1
                 changed = True
