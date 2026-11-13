@@ -1,19 +1,19 @@
-from __future__ import annotations
-
-from contextlib import ExitStack
 import shutil
+import sys
 import winreg
+from collections.abc import Sequence
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
+from fonti.ls import find_installed_fonts
 from fonti.meta import reg_name
 from fonti.scan import find
-from fonti.select import select
-from fonti.win.env import (
-    WIN10_1809_BUILD,
-    get_windows_build_number,
-    is_admin,
+from fonti.win.active import (
+    add_font_resource,
+    broadcast_font_change,
+    remove_font_resource,
 )
-from fonti.win.active import add_font_resource, broadcast_font_change
+from fonti.win.env import WIN10_1809_BUILD, get_windows_build_number, is_admin
 from fonti.win.reg import (
     FONT_REGISTRY_PATH,
     get_font_install_dir,
@@ -22,98 +22,116 @@ from fonti.win.reg import (
 )
 
 
-def install(
-    source: Path,
-    is_global: bool = False,
-    force: bool = False,
-    name_regex: str | None = None,
-    formats: list[str] | None = None,
-) -> None:
-    """Copy fonts, register them in Windows, and broadcast the update."""
-    build_number = get_windows_build_number()
+def same_contents(source: Path, target: Path) -> bool:
+    if source.samefile(target):
+        return True
+    if source.stat().st_size != target.stat().st_size:
+        return False
+    with source.open("rb") as left, target.open("rb") as right:
+        while chunk := left.read(1024 * 1024):
+            if chunk != right.read(len(chunk)):
+                return False
+        return not right.read(1)
 
-    if build_number < WIN10_1809_BUILD and not is_global:
-        raise SystemExit(
-            f"Error: Windows Build {build_number} is too old for user-level fonts. "
-            f"User-level fonts require Windows 10 Version 1809 or later."
+
+def copy_font(source: Path, target: Path, *, overwrite: bool, registered: bool) -> None:
+    # Publish a complete file so an interrupted copy can be retried.
+    with NamedTemporaryFile(dir=target.parent, delete=False) as temp:
+        staged = Path(temp.name)
+    try:
+        shutil.copyfile(source, staged)
+        deactivated = overwrite and registered and remove_font_resource(target)
+        try:
+            if overwrite:
+                staged.replace(target)
+            else:
+                # On Windows rename fails if another process created the destination.
+                staged.rename(target)
+        except OSError:
+            if deactivated:
+                add_font_resource(target)
+            raise
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def install_one(source: Path, *, system: bool, replace: bool) -> bool:
+    name = reg_name(source)
+    target = get_font_install_dir(system) / source.name
+    registered = False
+    other_names = []
+    for font in find_installed_fonts(system):
+        if font.name.casefold() == name.casefold():
+            if font.path != target:
+                raise ValueError(
+                    f"'{name}' already points to '{font.path}'. Remove that entry first."
+                )
+            registered = True
+        elif font.path == target:
+            other_names.append(font.name)
+
+    exists = target.exists()
+    identical = exists and same_contents(source, target)
+    if identical and registered:
+        print(f"Already installed: {name}")
+        return False
+    if exists and not identical and not replace:
+        raise ValueError(
+            f"Different contents at '{target}'. Use --replace to overwrite."
+        )
+    if not identical and other_names:
+        raise ValueError(
+            f"'{target}' is registered as {', '.join(other_names)}. Remove the conflicting entries first."
         )
 
-    if is_global and not is_admin():
-        raise SystemExit("Error: Global font installation requires admin privileges.")
+    with winreg.CreateKeyEx(
+        get_registry_root(system), FONT_REGISTRY_PATH, 0, winreg.KEY_SET_VALUE
+    ) as key:
+        if not identical:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            copy_font(source, target, overwrite=exists, registered=registered)
+        if not registered:
+            winreg.SetValueEx(
+                key, name, 0, winreg.REG_SZ, get_registry_value_data(target, system)
+            )
 
-    font_install_dir = get_font_install_dir(is_global)
-    registry_root = get_registry_root(is_global)
-
-    font_files = select(
-        find(source),
-        name_regex=name_regex,
-        formats=formats,
-    )
-
-    any_matched = False
-    any_registered = False
-
-    with ExitStack() as stack:
-        key = None
-
-        for font_file in font_files:
-            any_matched = True
-            font_file = font_file.resolve()
-            font_name = reg_name(font_file)
-            target_path = font_install_dir / font_file.name
-
-            same_file = False
-            try:
-                same_file = font_file.samefile(target_path)
-            except FileNotFoundError:
-                same_file = False
-
-            if not same_file:
-                if target_path.exists() and not force:
-                    print(f"Skip existing file: {target_path}")
-                    continue
-
-                if not is_global:
-                    font_install_dir.mkdir(parents=True, exist_ok=True)
-
-                if key is None:
-                    key = stack.enter_context(
-                        winreg.CreateKeyEx(
-                            registry_root,
-                            FONT_REGISTRY_PATH,
-                            0,
-                            winreg.KEY_SET_VALUE,
-                        )
-                    )
-
-                shutil.copy2(font_file, target_path)
-            elif key is None:
-                key = stack.enter_context(
-                    winreg.CreateKeyEx(
-                        registry_root,
-                        FONT_REGISTRY_PATH,
-                        0,
-                        winreg.KEY_SET_VALUE,
-                    )
+    print(f"Installed: {name}")
+    if not other_names:
+        try:
+            if not add_font_resource(target):
+                print(
+                    f"Warning: Immediate activation failed for '{target}'; a restart may be required.",
+                    file=sys.stderr,
                 )
+        except OSError as exc:
+            print(
+                f"Warning: Immediate activation failed for '{target}': {exc}. A restart may be required.",
+                file=sys.stderr,
+            )
+    return True
 
-            registry_value = get_registry_value_data(target_path, is_global)
-            winreg.SetValueEx(key, font_name, 0, winreg.REG_SZ, registry_value)
-            any_registered = True
 
-            added = add_font_resource(target_path)
-            print(f"Installed persistently: {font_name}")
-            print(f"  File: {target_path}")
-            print(f"  Registry: {registry_value}")
+def install(
+    paths: Sequence[Path], *, system: bool = False, replace: bool = False
+) -> None:
+    if system and not is_admin():
+        raise ValueError("Installing system fonts requires administrator privileges.")
+    if not system and get_windows_build_number() < WIN10_1809_BUILD:
+        raise ValueError("User fonts require Windows 10 version 1809 or later.")
 
-            if added == 0:
-                print("  Immediate activation: failed; reboot may be required.")
-            else:
-                print(f"  Immediate activation: ok ({added})")
-
-    if not any_matched:
-        print(f"No valid/matching font files found in: {source}")
-        return
-
-    if any_registered:
-        broadcast_font_change()
+    changed = False
+    try:
+        for path in paths:
+            found = False
+            for source in find(path):
+                found = True
+                try:
+                    if install_one(source, system=system, replace=replace):
+                        changed = True
+                except OSError as exc:
+                    raise OSError(f"Could not install '{source}': {exc}") from exc
+            if not found:
+                raise ValueError(f"No supported fonts in '{path}'.")
+    finally:
+        if changed:
+            broadcast_font_change()

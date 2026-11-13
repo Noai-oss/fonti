@@ -19,6 +19,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except click.ClickException as exc:
         exc.show(file=sys.stderr)
         return exc.exit_code
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        return 1
     except (KeyboardInterrupt, typer.Abort):
         typer.echo("Interrupted.", err=True)
         return 130

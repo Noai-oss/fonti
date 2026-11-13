@@ -26,7 +26,7 @@ def test_multiple_install_paths_and_flags(monkeypatch):
     monkeypatch.setattr(cli, "install", lambda path, **kw: calls.append((path, kw)))
     assert main(["install", "a.ttf", "fonts", "--replace", "--system"]) == 0
     assert calls == [
-        (Path(p), {"force": True, "is_global": True}) for p in ("a.ttf", "fonts")
+        ([Path("a.ttf"), Path("fonts")], {"system": True, "replace": True})
     ]
 
 

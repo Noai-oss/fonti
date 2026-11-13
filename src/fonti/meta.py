@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from struct import error as StructError
 
-from fontTools.ttLib import TTCollection, TTFont
+from fontTools.ttLib import TTCollection, TTFont, TTLibError
 
 
 def kind(path: Path) -> str:
@@ -39,6 +40,24 @@ def get_font_display_name(font: TTFont, fallback: str) -> str:
 
 
 def reg_name(font_path: Path) -> str:
+    try:
+        return _read_registry_name(font_path)
+    except (
+        TTLibError,
+        StructError,
+        KeyError,
+        IndexError,
+        UnicodeError,
+        EOFError,
+        ValueError,
+        AssertionError,
+    ) as exc:
+        raise ValueError(
+            f"Cannot read font metadata from '{font_path}': {exc}"
+        ) from exc
+
+
+def _read_registry_name(font_path: Path) -> str:
     """
     Generate the Windows registry value name for a font file.
 
