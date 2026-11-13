@@ -6,8 +6,7 @@ import typer
 from fonti.info import show_info
 from fonti.install import install
 from fonti.ls import list_installed_fonts
-from fonti.uninstall import resolve_uninstall_target, uninstall_font_targets
-from fonti.win.env import is_admin
+from fonti.uninstall import remove
 
 
 app = typer.Typer(
@@ -59,19 +58,7 @@ def remove_cmd(
     system: SystemScope = False,
 ) -> None:
     """Remove one or more installed fonts."""
-    if system and not is_admin():
-        raise SystemExit(
-            "Error: Removing system fonts requires administrator privileges."
-        )
-    resolved = []
-    for token in targets:
-        matches = list(resolve_uninstall_target(token, is_global=system))
-        if len(matches) != 1:
-            raise SystemExit(
-                f"Error: Expected one installed font matching '{token}', found {len(matches)}."
-            )
-        resolved.extend(matches)
-    uninstall_font_targets(dict.fromkeys(resolved), is_global=system)
+    remove(targets, system=system)
 
 
 @app.command("info")

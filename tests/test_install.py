@@ -27,7 +27,6 @@ def windows(monkeypatch, tmp_path):
         lambda system: (
             InstalledFont(
                 name,
-                value,
                 Path(value) if Path(value).is_absolute() else target / value,
             )
             for name, value in values.items()
