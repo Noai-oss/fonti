@@ -111,7 +111,6 @@ def test_find_installed_fonts_filters_names(monkeypatch: pytest.MonkeyPatch) -> 
     assert list(ls_module.find_installed_fonts(keyword="mono")) == [
         ls_module.InstalledFont(
             "Mono Regular (TrueType)",
-            r"C:\Fonts\Mono.ttf",
             Path(r"C:\Fonts\Mono.ttf"),
         )
     ]
@@ -123,7 +122,6 @@ def test_list_installed_fonts_prints_pipeline_friendly_rows(
 ) -> None:
     font = ls_module.InstalledFont(
         "Demo Regular (TrueType)",
-        r"C:\Fonts\Demo.ttf",
         Path(r"C:\Fonts\Demo.ttf"),
     )
     monkeypatch.setattr(
