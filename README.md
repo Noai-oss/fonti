@@ -10,35 +10,41 @@ With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) insta
 uv tool install git+https://github.com/Noai-oss/fonti
 ```
 
-### Example: install LXGW WenKai
-
-Open PowerShell in a folder where you want to keep the downloaded font. The [LXGW WenKai v1.530 release](https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530) includes a standalone TTF for the Regular weight. Download it and inspect the name Fonti will register.
+To install a single font for your Windows account, pass its path.
 
 ```powershell
-$fontUrl = 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/LXGWWenKai-Regular.ttf'
-$fontFile = Join-Path (Get-Location) 'LXGWWenKai-Regular.ttf'
-Invoke-WebRequest -UseBasicParsing -Uri $fontUrl -OutFile $fontFile -ErrorAction Stop
-fonti info $fontFile
+fonti install .\Regular.ttf
 ```
 
-Install it for your Windows account, then look it up by filename.
+## Install a font family from a release ZIP
+
+Open PowerShell in an empty folder. Download the font archive from the [LXGW WenKai v1.530 release](https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530) and extract it.
 
 ```powershell
-fonti install $fontFile
-fonti list 'LXGWWenKai-Regular.ttf'
+$url = 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/lxgw-wenkai-v1.530.zip'
+Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile .\lxgw-wenkai-v1.530.zip -ErrorAction Stop
+Expand-Archive -LiteralPath .\lxgw-wenkai-v1.530.zip -DestinationPath .\wenkai -ErrorAction Stop
 ```
 
-The matching row shows the installed name and filename, separated by a tab.
+Preview the fonts, install the extracted directory for your account, then list the installed entries. Fonti searches subdirectories recursively.
+
+```powershell
+fonti info .\wenkai
+fonti install .\wenkai
+fonti list WenKai
+```
+
+The archive includes Light, Regular, and Medium weights for both LXGW WenKai and LXGW WenKai Mono. Look for six matching rows. Each shows an installed name and a filename, separated by a tab. One of them is the Regular weight.
 
 ```text
 LXGW WenKai (TrueType)	LXGWWenKai-Regular.ttf
 ```
 
-You can now select LXGW WenKai in a newly opened app's font picker. To uninstall it later, pass the exact filename from the row above. The final lookup should print nothing.
+**Optional cleanup.** To remove just the Regular font shown above, pass its exact filename. The other five fonts from the archive will still appear in the list.
 
 ```powershell
 fonti remove 'LXGWWenKai-Regular.ttf'
-fonti list 'LXGWWenKai-Regular.ttf'
+fonti list WenKai
 ```
 
 ## Installing fonts
