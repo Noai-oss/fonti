@@ -16,6 +16,9 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
 ]
 
+[project.urls]
+Repository = "https://github.com/Noai-oss/fonti"
+
 [project.scripts]
 fonti = "fonti.__main__:main"
 
