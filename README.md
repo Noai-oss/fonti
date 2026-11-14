@@ -10,17 +10,35 @@ With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) insta
 uv tool install git+https://github.com/Noai-oss/fonti
 ```
 
-If you have `CascadiaMono.ttf` in a local `fonts` folder, install it for your account and look it up.
+### Example: install LXGW WenKai
+
+Open PowerShell in a folder where you want to keep the downloaded font. The [LXGW WenKai v1.530 release](https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530) includes a standalone TTF for the Regular weight. Download it and inspect the name Fonti will register.
 
 ```powershell
-fonti install .\fonts\CascadiaMono.ttf
-fonti list Cascadia
+$fontUrl = 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/LXGWWenKai-Regular.ttf'
+$fontFile = Join-Path (Get-Location) 'LXGWWenKai-Regular.ttf'
+Invoke-WebRequest -UseBasicParsing -Uri $fontUrl -OutFile $fontFile -ErrorAction Stop
+fonti info $fontFile
 ```
 
-The two columns are the installed name and filename, separated by a tab.
+Install it for your Windows account, then look it up by filename.
+
+```powershell
+fonti install $fontFile
+fonti list 'LXGWWenKai-Regular.ttf'
+```
+
+The matching row shows the installed name and filename, separated by a tab.
 
 ```text
-Cascadia Mono (TrueType)	CascadiaMono.ttf
+LXGW WenKai (TrueType)	LXGWWenKai-Regular.ttf
+```
+
+You can now select LXGW WenKai in a newly opened app's font picker. To uninstall it later, pass the exact filename from the row above. The final lookup should print nothing.
+
+```powershell
+fonti remove 'LXGWWenKai-Regular.ttf'
+fonti list 'LXGWWenKai-Regular.ttf'
 ```
 
 ## Installing fonts
@@ -45,18 +63,7 @@ You can rerun an install. Fonti skips identical, registered files and finishes r
 
 Use `info` on a file or directory to see the name Fonti will register. Use `list` to find installed fonts by name or filename. Its optional keyword is a case-insensitive, literal substring.
 
-```powershell
-fonti info .\fonts\CascadiaMono.ttf
-fonti list Mono
-```
-
-To uninstall a font, copy its exact filename or installed name from `list`. Quote names containing spaces.
-
-```powershell
-fonti remove 'CascadiaMono.ttf'
-```
-
-You can pass several targets. Fonti checks every target before removing any of them. If a filename is ambiguous, use the installed name. Files shared by other entries in the same scope and originals outside its font directory are preserved. To remove a system font, add `--system` in an elevated PowerShell window.
+To uninstall a font, copy its exact filename or installed name from `list`. Quote names containing spaces. You can pass several targets. Fonti checks every target before removing any of them. If a filename is ambiguous, use the installed name. Files shared by other entries in the same scope and originals outside its font directory are preserved. To remove a system font, add `--system` in an elevated PowerShell window.
 
 ## Using Fonti in scripts
 
