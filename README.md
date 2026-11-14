@@ -4,10 +4,10 @@ Install a font file or a whole folder of fonts on Windows from PowerShell. Fonti
 
 ## Quick start
 
-With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, run this in PowerShell. Fonti requires Python 3.13 or later.
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, run this in PowerShell to install Fonti from PyPI. Fonti requires Python 3.13 or later.
 
 ```powershell
-uv tool install git+https://github.com/Noai-oss/fonti
+uv tool install fonti
 ```
 
 To install a single font for your Windows account, pass its path.
