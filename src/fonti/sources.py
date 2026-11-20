@@ -5,13 +5,13 @@ import stat
 from collections.abc import Generator
 from contextlib import contextmanager
 from http.client import HTTPException
-from lzma import LZMAError
+from io import FileIO
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 from typing import IO, TypeGuard
 from urllib.parse import unquote, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
-from zipfile import BadZipFile, ZipFile
+from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile
 from zlib import error as ZlibError
 
 from fonti.scan import SUPPORTED_FONT_EXTENSIONS
@@ -19,14 +19,30 @@ from fonti.scan import SUPPORTED_FONT_EXTENSIONS
 MAX_DOWNLOAD = 256 * 1024 * 1024
 MAX_EXTRACTED = 512 * 1024 * 1024
 MAX_ENTRIES = 4096
+MAX_ZIP_DIRECTORY = 4 * 1024 * 1024
+MAX_ZIP_DEPTH = 64
 DOWNLOAD_EXTENSIONS = SUPPORTED_FONT_EXTENSIONS | {".zip"}
 
 
 class HTTPSRedirectHandler(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # urllib drains the HTTPResponse before following a redirect. Its body
+        # is irrelevant to the download and may have no declared length.
+        fp.close()
         if urlsplit(newurl).scheme.lower() != "https":
             raise ValueError("Font downloads require HTTPS on every redirect.")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class _ZipReader(FileIO):
+    def read(self, size=-1, /):
+        # ZipFile reads the central directory in one call, before infolist()
+        # is available. Font payloads are read in smaller chunks.
+        if size is None or size < 0:
+            size = max(0, os.fstat(self.fileno()).st_size - self.tell())
+        if size > MAX_ZIP_DIRECTORY:
+            raise ValueError("Font ZIP directory exceeds the metadata limit.")
+        return super().read(size)
 
 
 def is_https(source: str | Path) -> TypeGuard[str]:
@@ -61,6 +77,10 @@ def _download(url: str, directory: Path) -> Path:
     opener = build_opener(HTTPSRedirectHandler())
     try:
         with opener.open(url, timeout=30) as response:
+            if response.getcode() == 206 or "Content-Range" in response.headers:
+                raise ValueError(
+                    "Expected a complete font download, received a partial response."
+                )
             if response.headers.get_content_type() == "text/html":
                 raise ValueError(
                     "Expected a direct font or ZIP download, received HTML."
@@ -97,7 +117,7 @@ def _extract_fonts(archive: Path, directory: Path) -> None:
     remaining = MAX_EXTRACTED
     found = False
     try:
-        with ZipFile(archive) as package:
+        with _ZipReader(archive, "r") as stream, ZipFile(stream) as package:
             if len(package.infolist()) > MAX_ENTRIES:
                 raise ValueError("Font ZIP contains too many entries.")
             for member in package.infolist():
@@ -105,20 +125,31 @@ def _extract_fonts(archive: Path, directory: Path) -> None:
                 if (
                     member.is_dir()
                     or path.suffix.lower() not in SUPPORTED_FONT_EXTENSIONS
+                    or "__MACOSX" in path.parts
                 ):
                     continue
                 if stat.S_ISLNK(member.external_attr >> 16):
                     continue
+                if len(path.parts) - 1 > MAX_ZIP_DEPTH:
+                    raise ValueError("Font ZIP directories are nested too deeply.")
                 for part in path.parts:
                     _check_name(part)
+                # ZipExtFile bounds decompressed reads for these methods.
+                if member.compress_type not in {ZIP_STORED, ZIP_DEFLATED}:
+                    raise ValueError(f"Unsupported ZIP compression for '{path.name}'.")
                 if member.file_size > remaining:
                     raise ValueError("Expanded font ZIP exceeds the size limit.")
                 target = directory.joinpath(*path.parts)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with package.open(member) as source, target.open("xb") as output:
-                    remaining -= _copy_limited(source, output, remaining)
+                with package.open(member) as source:
+                    if path.name.startswith("._"):
+                        if source.read(4) == b"\x00\x05\x16\x07":  # AppleDouble
+                            continue
+                        source.seek(0)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open("xb") as output:
+                        remaining -= _copy_limited(source, output, remaining)
                 found = True
-    except (BadZipFile, EOFError, RuntimeError, ZlibError, LZMAError) as exc:
+    except (BadZipFile, EOFError, RuntimeError, ZlibError) as exc:
         raise ValueError(f"Could not read font ZIP '{archive.name}': {exc}") from exc
     if not found:
         raise ValueError(f"No supported fonts in '{archive.name}'.")
@@ -134,7 +165,7 @@ def local_source(source: str | Path) -> Generator[Path]:
         return
 
     with TemporaryDirectory(prefix="fonti-") as temp:
-        root = Path(temp)
+        root = Path(temp).resolve()
         downloaded = _download(source, root)
         if downloaded.suffix.lower() == ".zip":
             directory = root / "fonts"

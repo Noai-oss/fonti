@@ -51,7 +51,7 @@ fonti install .\Regular.ttf .\Bold.ttf
 
 Both `info` and `install` accept direct HTTPS links to individual fonts or ZIP files. For a GitHub release, copy the asset's download link. You can mix local paths and URLs in one `install` command. Each command downloads its own temporary copy and cleans it up afterward.
 
-Downloads are limited to 256 MiB each. A ZIP can contain up to 4,096 entries and up to 512 MiB of expanded fonts. Fonti searches its subdirectories and extracts only supported font files.
+Downloads are limited to 256 MiB each. Fonti extracts stored or Deflate-compressed fonts from ZIP subdirectories and skips macOS metadata. A ZIP can contain up to 4,096 entries, 4 MiB of central directory metadata, and 512 MiB of expanded fonts. Font paths can be nested up to 64 directories deep.
 
 Current-user installs require Windows 10 version 1809 or later. To install for everyone, open PowerShell as administrator and use `--system`.
 
@@ -61,6 +61,8 @@ fonti list --system
 ```
 
 You can rerun an install. Fonti skips identical, registered files and finishes registration if a previous run stopped after copying. Use `--replace` to overwrite a file with the same filename and different contents. If the font name already points to another file, use `list` to find the conflicting entry.
+
+Some releases bundle static and variable fonts that register under the same name. Use `info` to spot duplicate registry names. To pick a variant, extract the ZIP locally and pass the desired font files to `install`.
 
 ## Inspecting and removing fonts
 

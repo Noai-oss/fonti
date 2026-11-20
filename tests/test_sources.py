@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import URLError
 from urllib.request import OpenerDirector, Request
+from zipfile import ZIP_BZIP2, ZIP_STORED
 
 import pytest
 from fontTools.ttLib import TTFont, newTable
@@ -27,6 +28,8 @@ def test_remote_info_reads_nested_fonts_and_prints_relative_names(
         "nested/Regular.ttf": font_bytes("Demo Regular"),
         "Bold.otf": font_bytes("Demo Bold"),
         "LICENSE.txt": b"text",
+        "__MACOSX/._Bold.otf": b"Finder metadata",
+        "nested/._Regular.ttf": b"\x00\x05\x16\x07",
     }
     serve_download(font_zip(files))
     assert main(["info", "https://fonts.example/family.zip"]) == 0
@@ -78,9 +81,49 @@ def test_redirects_require_https():
     handler = sources.HTTPSRedirectHandler()
     req = Request("https://fonts.example/asset")
     url = "https://cdn.example/file.ttf"
-    assert handler.redirect_request(req, None, 302, "", {}, url).full_url == url
+    response = BytesIO(b"Link moved")
+    assert handler.redirect_request(req, response, 302, "", {}, url).full_url == url
+    assert response.closed
+    response = BytesIO()
     with pytest.raises(ValueError, match="HTTPS"):
-        handler.redirect_request(req, None, 302, "", {}, "http://cdn.example/file.ttf")
+        handler.redirect_request(
+            req, response, 302, "", {}, "http://cdn.example/file.ttf"
+        )
+    assert response.closed
+
+
+def test_partial_response_is_rejected(serve_download, capsys):
+    data = font_bytes("Demo Regular")
+    serve_download(data, status=206, headers={"Content-Length": str(len(data))})
+    assert main(["info", "https://fonts.example/Demo.ttf"]) == 1
+    assert "partial" in capsys.readouterr().err.lower()
+
+
+def test_limit_zip_directory_before_reading_entries(
+    monkeypatch, serve_download, font_zip, capsys
+):
+    monkeypatch.setattr(sources, "MAX_ZIP_DIRECTORY", 100)
+    serve_download(font_zip({"First.ttf": b"one", "Second.ttf": b"two"}))
+    assert main(["info", "https://fonts.example/fonts.zip"]) == 1
+    assert "ZIP directory" in capsys.readouterr().err
+
+
+def test_limit_archive_depth_before_creating_directories(
+    monkeypatch, serve_download, font_zip, capsys
+):
+    monkeypatch.setattr(sources, "MAX_ZIP_DEPTH", 1)
+    serve_download(font_zip({"family/regular/Demo.ttf": b"one"}))
+    assert main(["info", "https://fonts.example/fonts.zip"]) == 1
+    assert "nested" in capsys.readouterr().err
+
+
+def test_zip_compression_methods(serve_download, font_zip, capsys):
+    files = {"Demo.ttf": font_bytes("Demo Regular")}
+    serve_download(font_zip(files, ZIP_STORED))
+    assert main(["info", "https://fonts.example/fonts.zip"]) == 0
+    serve_download(font_zip(files, ZIP_BZIP2))
+    assert main(["info", "https://fonts.example/fonts.zip"]) == 1
+    assert "compression" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

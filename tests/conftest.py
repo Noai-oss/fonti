@@ -11,12 +11,12 @@ import pytest
 def serve_download(monkeypatch):
     """Supply a fresh HTTP response for each request, including repeat installs."""
 
-    def serve(body, *, headers=None, final_url=None):
+    def serve(body, *, headers=None, final_url=None, status=200):
         def open_response(opener, url, timeout):
             metadata = Message()
             for key, value in (headers or {}).items():
                 metadata[key] = value
-            return addinfourl(BytesIO(body), metadata, final_url or url, 200)
+            return addinfourl(BytesIO(body), metadata, final_url or url, status)
 
         monkeypatch.setattr(OpenerDirector, "open", open_response)
 
@@ -25,9 +25,9 @@ def serve_download(monkeypatch):
 
 @pytest.fixture
 def font_zip():
-    def pack(files):
+    def pack(files, compression=ZIP_DEFLATED):
         buffer = BytesIO()
-        with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        with ZipFile(buffer, "w", compression) as archive:
             for name, data in files.items():
                 archive.writestr(name, data)
         return buffer.getvalue()
