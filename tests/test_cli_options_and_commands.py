@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from fonti import cli
@@ -25,9 +23,7 @@ def test_multiple_install_paths_and_flags(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "install", lambda path, **kw: calls.append((path, kw)))
     assert main(["install", "a.ttf", "fonts", "--replace", "--system"]) == 0
-    assert calls == [
-        ([Path("a.ttf"), Path("fonts")], {"system": True, "replace": True})
-    ]
+    assert calls == [(["a.ttf", "fonts"], {"system": True, "replace": True})]
 
 
 def test_list_accepts_literal_keyword_and_scope(monkeypatch, capsys):
@@ -49,4 +45,4 @@ def test_info_delegates_the_path(monkeypatch):
     paths = []
     monkeypatch.setattr(cli, "show_info", paths.append)
     assert main(["info", "Demo.ttf"]) == 0
-    assert paths == [Path("Demo.ttf")]
+    assert paths == ["Demo.ttf"]

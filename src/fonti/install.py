@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile
 from fonti.ls import find_installed_fonts
 from fonti.meta import reg_name
 from fonti.scan import find
+from fonti.sources import local_source
 from fonti.win.active import (
     add_font_resource,
     broadcast_font_change,
@@ -112,7 +113,7 @@ def install_one(source: Path, *, system: bool, replace: bool) -> bool:
 
 
 def install(
-    paths: Sequence[Path], *, system: bool = False, replace: bool = False
+    paths: Sequence[str | Path], *, system: bool = False, replace: bool = False
 ) -> None:
     if system and not is_admin():
         raise ValueError("Installing system fonts requires administrator privileges.")
@@ -123,13 +124,14 @@ def install(
     try:
         for path in paths:
             found = False
-            for source in find(path):
-                found = True
-                try:
-                    if install_one(source, system=system, replace=replace):
-                        changed = True
-                except OSError as exc:
-                    raise OSError(f"Could not install '{source}': {exc}") from exc
+            with local_source(path) as local:
+                for source in find(local):
+                    found = True
+                    try:
+                        if install_one(source, system=system, replace=replace):
+                            changed = True
+                    except OSError as exc:
+                        raise OSError(f"Could not install '{source}': {exc}") from exc
             if not found:
                 raise ValueError(f"No supported fonts in '{path}'.")
     finally:

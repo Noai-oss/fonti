@@ -73,6 +73,37 @@ def test_install_directory_and_overlapping_paths(windows, capsys):
     assert "Already installed: Demo" in capsys.readouterr().out
 
 
+def test_install_from_url_preserves_order_and_reuses_local_conflict_rules(
+    windows, serve_download, capsys
+):
+    url = "https://fonts.example/Demo.ttf?version=2"
+    serve_download(b"version two")
+    assert main(["install", str(windows.source), url]) == 1
+    assert "--replace" in capsys.readouterr().err
+    assert windows.target.read_bytes() == windows.source.read_bytes()
+    assert main(["install", url, "--replace"]) == 0
+    assert windows.target.read_bytes() == b"version two"
+    assert main(["install", url]) == 0
+    assert "Already installed: Demo" in capsys.readouterr().out
+    assert windows.broadcasts == [True, True]
+
+
+def test_install_release_zip_twice(windows, serve_download, font_zip, capsys):
+    names = [
+        family + "-" + weight
+        for family in ("Demo", "DemoMono")
+        for weight in ("Light", "Regular", "Medium")
+    ]
+    serve_download(font_zip({f"fonts/{name}.ttf": name.encode() for name in names}))
+    url = "https://fonts.example/releases/download/v1/family.zip"
+    assert main(["install", url]) == 0
+    assert set(windows.values) == set(names)
+    assert len(windows.activated) == 6
+    assert main(["install", url]) == 0
+    assert capsys.readouterr().out.count("Already installed:") == 6
+    assert windows.broadcasts == [True]
+
+
 def test_retry_after_registry_write_failure(windows, monkeypatch, capsys):
     w = windows
 

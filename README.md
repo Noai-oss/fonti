@@ -18,19 +18,12 @@ fonti install .\Regular.ttf
 
 ## Install a font family from a release ZIP
 
-Open PowerShell in an empty folder. Download the font archive from the [LXGW WenKai v1.530 release](https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530) and extract it.
+Use the ZIP download link from the [LXGW WenKai v1.530 release](https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530). Preview the fonts, install them for your account, then list the installed entries.
 
 ```powershell
 $url = 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/lxgw-wenkai-v1.530.zip'
-Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile .\lxgw-wenkai-v1.530.zip -ErrorAction Stop
-Expand-Archive -LiteralPath .\lxgw-wenkai-v1.530.zip -DestinationPath .\wenkai -ErrorAction Stop
-```
-
-Preview the fonts, install the extracted directory for your account, then list the installed entries. Fonti searches subdirectories recursively.
-
-```powershell
-fonti info .\wenkai
-fonti install .\wenkai
+fonti info "$url"
+fonti install "$url"
 fonti list WenKai
 ```
 
@@ -56,6 +49,10 @@ fonti install .\fonts
 fonti install .\Regular.ttf .\Bold.ttf
 ```
 
+Both `info` and `install` accept direct HTTPS links to individual fonts or ZIP files. For a GitHub release, copy the asset's download link. You can mix local paths and URLs in one `install` command. Each command downloads its own temporary copy and cleans it up afterward.
+
+Downloads are limited to 256 MiB each. A ZIP can contain up to 4,096 entries and up to 512 MiB of expanded fonts. Fonti searches its subdirectories and extracts only supported font files.
+
 Current-user installs require Windows 10 version 1809 or later. To install for everyone, open PowerShell as administrator and use `--system`.
 
 ```powershell
@@ -67,7 +64,7 @@ You can rerun an install. Fonti skips identical, registered files and finishes r
 
 ## Inspecting and removing fonts
 
-Use `info` on a file or directory to see the name Fonti will register. Use `list` to find installed fonts by name or filename. Its optional keyword is a case-insensitive, literal substring.
+Use `info` on a path or HTTPS download link to see the names Fonti will register. Use `list` to find installed fonts by name or filename. Its optional keyword is a case-insensitive, literal substring.
 
 To uninstall a font, copy its exact filename or installed name from `list`. Quote names containing spaces. You can pass several targets. Fonti checks every target before removing any of them. If a filename is ambiguous, use the installed name. Files shared by other entries in the same scope and originals outside its font directory are preserved. To remove a system font, add `--system` in an elevated PowerShell window.
 
