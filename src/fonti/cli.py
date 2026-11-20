@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -18,13 +17,12 @@ SystemScope = Annotated[
     bool,
     typer.Option("--system", help="Use system fonts instead of current-user fonts."),
 ]
+SOURCE_HELP = "Font file, directory (recursive), or direct HTTPS font or ZIP URL."
 
 
 @app.command("install")
 def install_cmd(
-    paths: Annotated[
-        list[Path], typer.Argument(help="Font files or directories (recursive).")
-    ],
+    paths: Annotated[list[str], typer.Argument(help=SOURCE_HELP)],
     system: SystemScope = False,
     replace: Annotated[
         bool,
@@ -33,7 +31,7 @@ def install_cmd(
         ),
     ] = False,
 ) -> None:
-    """Install one or more font files or directories."""
+    """Install fonts from one or more paths or HTTPS URLs."""
     install(paths, system=system, replace=replace)
 
 
@@ -62,7 +60,7 @@ def remove_cmd(
 
 @app.command("info")
 def info_cmd(
-    path: Annotated[Path, typer.Argument(help="Font file or directory (recursive).")],
+    path: Annotated[str, typer.Argument(help=SOURCE_HELP)],
 ) -> None:
     """Inspect font names before installing."""
     show_info(path)
