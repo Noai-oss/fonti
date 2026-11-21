@@ -1,6 +1,6 @@
 [project]
 name = "fonti"
-version = "0.1.0"
+version = "0.1.1"
 description = "A command-line tool for installing fonts on Windows"
 readme = "README.md"
 authors = [
