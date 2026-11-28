@@ -1,6 +1,18 @@
 # Fonti
 
-Install a font file or a whole folder of fonts on Windows from PowerShell. Fonti supports `.ttf`, `.otf`, `.ttc`, and `.otc` files.
+Install fonts on Windows from a desktop window or PowerShell. Fonti supports `.ttf`, `.otf`, `.ttc`, and `.otc` files.
+
+## Windows desktop app
+
+Open `Fonti.exe` on x64 Windows 10 version 1809 or later with Microsoft Edge WebView2 Runtime installed. Choose a folder, select fonts from its subfolders, and click **Install selected** to install them for your account. The app includes Fonti, Python, and JadeView.
+
+![Fonti scans a folder, installs the selected font, and skips it on a second install.](docs/desktop-demo.gif)
+
+To build `dist/Fonti.exe` from a checkout, use x64 Python and run the following command. The build downloads the pinned JadeView runtime and verifies its SHA-256. To use an existing copy of the official ZIP, append `--sdk-zip PATH` to the command. [JadeView release](https://github.com/JadeViewDocs/JadeView/releases/tag/v3.0.0-beta.6)
+
+```powershell
+uv run --locked --with pyinstaller==6.22.3 python desktop/build.py
+```
 
 ## Quick start
 

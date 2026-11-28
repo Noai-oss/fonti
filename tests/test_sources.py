@@ -10,6 +10,7 @@ from fontTools.ttLib import TTFont, newTable
 
 from fonti import sources
 from fonti.__main__ import main
+from fonti.info import FailedScan, FontInfo, scan_fonts
 
 
 def font_bytes(name):
@@ -19,6 +20,26 @@ def font_bytes(name):
         font["name"].setName(name, 4, 3, 1, 0x409)
         font.save(buffer)
     return buffer.getvalue()
+
+
+def test_scan_retains_valid_fonts_after_corrupt_file_and_cli_stops(tmp_path, capsys):
+    first, broken, last = (tmp_path / f"{letter}.ttf" for letter in "ABC")
+    first.write_bytes(font_bytes("First"))
+    broken.write_bytes(b"broken font")
+    last.write_bytes(font_bytes("Last"))
+
+    valid, failure, later = scan_fonts(tmp_path)
+    assert valid == FontInfo(first, "First (TrueType)", "TrueType")
+    assert isinstance(failure, FailedScan) and failure.path == broken
+    assert later == FontInfo(last, "Last (TrueType)", "TrueType")
+
+    assert main(["info", str(tmp_path)]) == 1
+    output = capsys.readouterr()
+    assert (
+        output.out
+        == f"{first}\n  Registry name: First (TrueType)\n  Kind: TrueType\n{broken}\n"
+    )
+    assert output.err == f"Error: {failure.error}\n"
 
 
 def test_remote_info_reads_nested_fonts_and_prints_relative_names(

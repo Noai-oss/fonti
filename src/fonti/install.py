@@ -1,9 +1,12 @@
 import shutil
 import sys
 import winreg
-from collections.abc import Sequence
+from collections.abc import Generator, Iterable, Sequence
+from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import ClassVar, Literal
 
 from fonti.ls import find_installed_fonts
 from fonti.meta import reg_name
@@ -21,6 +24,25 @@ from fonti.win.reg import (
     get_registry_root,
     get_registry_value_data,
 )
+
+
+@dataclass(frozen=True)
+class InstallResult:
+    path: Path
+    name: str
+    status: Literal["installed", "skipped"]
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class FailedInstall:
+    path: Path
+    error: OSError | ValueError
+    status: ClassVar[Literal["failed"]] = "failed"
+
+    @property
+    def message(self) -> str:
+        return str(self.error)
 
 
 def same_contents(source: Path, target: Path) -> bool:
@@ -56,7 +78,16 @@ def copy_font(source: Path, target: Path, *, overwrite: bool, registered: bool) 
         staged.unlink(missing_ok=True)
 
 
-def install_one(source: Path, *, system: bool, replace: bool) -> bool:
+def activation_warning(target: Path) -> str:
+    try:
+        if add_font_resource(target):
+            return ""
+        return f"Immediate activation failed for '{target}'; a restart may be required."
+    except OSError as exc:
+        return f"Immediate activation failed for '{target}': {exc}. A restart may be required."
+
+
+def install_one(source: Path, *, system: bool, replace: bool) -> InstallResult:
     name = reg_name(source)
     target = get_font_install_dir(system) / source.name
     registered = False
@@ -74,8 +105,7 @@ def install_one(source: Path, *, system: bool, replace: bool) -> bool:
     exists = target.exists()
     identical = exists and same_contents(source, target)
     if identical and registered:
-        print(f"Already installed: {name}")
-        return False
+        return InstallResult(source, name, "skipped")
     if exists and not identical and not replace:
         raise ValueError(
             f"Different contents at '{target}'. Use --replace to overwrite."
@@ -96,25 +126,14 @@ def install_one(source: Path, *, system: bool, replace: bool) -> bool:
                 key, name, 0, winreg.REG_SZ, get_registry_value_data(target, system)
             )
 
-    print(f"Installed: {name}")
-    if not other_names:
-        try:
-            if not add_font_resource(target):
-                print(
-                    f"Warning: Immediate activation failed for '{target}'; a restart may be required.",
-                    file=sys.stderr,
-                )
-        except OSError as exc:
-            print(
-                f"Warning: Immediate activation failed for '{target}': {exc}. A restart may be required.",
-                file=sys.stderr,
-            )
-    return True
+    warning = "" if other_names else activation_warning(target)
+    return InstallResult(source, name, "installed", warning)
 
 
-def install(
-    paths: Sequence[str | Path], *, system: bool = False, replace: bool = False
-) -> None:
+def install_files(
+    files: Iterable[Path], *, system: bool = False, replace: bool = False
+) -> Generator[InstallResult | FailedInstall]:
+    """Install these exact files in order, stopping at the first failed result."""
     if system and not is_admin():
         raise ValueError("Installing system fonts requires administrator privileges.")
     if not system and get_windows_build_number() < WIN10_1809_BUILD:
@@ -122,18 +141,46 @@ def install(
 
     changed = False
     try:
-        for path in paths:
-            found = False
-            with local_source(path) as local:
-                for source in find(local):
-                    found = True
-                    try:
-                        if install_one(source, system=system, replace=replace):
-                            changed = True
-                    except OSError as exc:
-                        raise OSError(f"Could not install '{source}': {exc}") from exc
-            if not found:
-                raise ValueError(f"No supported fonts in '{path}'.")
+        for source in files:
+            try:
+                result = install_one(source, system=system, replace=replace)
+            except OSError as exc:
+                yield FailedInstall(
+                    source, OSError(f"Could not install '{source}': {exc}")
+                )
+                return
+            except ValueError as exc:
+                yield FailedInstall(source, exc)
+                return
+            changed = changed or result.status == "installed"
+            yield result
     finally:
         if changed:
             broadcast_font_change()
+
+
+def _source_files(paths: Sequence[str | Path]) -> Generator[Path]:
+    for path in paths:
+        found = False
+        with local_source(path) as local:
+            for source in find(local):
+                found = True
+                yield source
+        if not found:
+            raise ValueError(f"No supported fonts in '{path}'.")
+
+
+def install(
+    paths: Sequence[str | Path], *, system: bool = False, replace: bool = False
+) -> None:
+    with (
+        closing(_source_files(paths)) as files,
+        closing(install_files(files, system=system, replace=replace)) as results,
+    ):
+        for result in results:
+            if isinstance(result, FailedInstall):
+                raise result.error
+            label = "Installed" if result.status == "installed" else "Already installed"
+            print(f"{label}: {result.name}")
+            if result.message:
+                print(f"Warning: {result.message}", file=sys.stderr)
