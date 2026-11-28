@@ -43,6 +43,9 @@ def test_info_prints_font_metadata(
     )
     monkeypatch.setattr(info_module, "kind", lambda path: "TrueType")
 
+    assert list(info_module.scan_fonts(tmp_path)) == [
+        info_module.FontInfo(font, "Demo Regular (TrueType)", "TrueType")
+    ]
     info_module.show_info(tmp_path)
 
     assert capsys.readouterr().out == (

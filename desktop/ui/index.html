@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fonti</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="app-header">
+      <div>
+        <h1>Fonti</h1>
+        <p>Windows font installer</p>
+      </div>
+      <button id="choose" type="button">Choose folder&hellip;</button>
+    </header>
+
+    <section aria-labelledby="folder-heading">
+      <h2 id="folder-heading">Folder fonts</h2>
+      <p id="folder" class="path" hidden></p>
+      <fieldset id="selection">
+        <legend class="sr-only">Fonts to install</legend>
+        <div class="panel">
+          <p id="scan-empty" class="empty">Choose a folder to review its fonts, including fonts in subfolders.</p>
+          <div id="scan-table" class="table-wrap" hidden>
+            <table aria-label="Fonts in the selected folder">
+              <thead>
+                <tr>
+                  <th scope="col" class="check"><input id="select-all" type="checkbox" aria-label="Select all fonts"></th>
+                  <th scope="col">Font file</th><th scope="col">Type</th>
+                  <th scope="col">Windows registry name</th><th scope="col">Result</th>
+                </tr>
+              </thead>
+              <tbody id="fonts"></tbody>
+            </table>
+          </div>
+          <div class="controls" id="controls" hidden>
+            <label class="replace"><input id="replace" type="checkbox"> Allow replacing files with the same name</label>
+            <button id="install" type="button" disabled>Install selected</button>
+          </div>
+        </div>
+      </fieldset>
+      <p id="status" role="status"></p>
+    </section>
+
+    <section aria-labelledby="installed-heading">
+      <div class="section-head">
+        <h2 id="installed-heading">Installed for this user <span id="installed-count"></span></h2>
+        <button id="refresh" class="secondary" type="button">Refresh</button>
+      </div>
+      <div class="panel">
+        <p id="installed-empty" class="empty" role="status">Reading installed fonts&hellip;</p>
+        <div id="installed-table" class="table-wrap" hidden>
+          <table aria-labelledby="installed-heading">
+            <thead><tr><th scope="col">Windows registry name</th><th scope="col">Filename</th></tr></thead>
+            <tbody id="installed"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

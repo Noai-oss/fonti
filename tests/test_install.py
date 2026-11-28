@@ -173,6 +173,31 @@ def test_batch_reports_empty_input_and_broadcasts_completed_fonts(
     assert windows.broadcasts == [True]
 
 
+def test_exact_file_batch_reports_progress_and_stops_at_conflict(windows, tmp_path):
+    repeat = tmp_path / "Already.ttf"
+    repeat.write_bytes(b"installed")
+    assert [r.status for r in installer.install_files([repeat])] == ["installed"]
+
+    conflict = tmp_path / "Conflict.ttf"
+    conflict.write_bytes(b"new contents")
+    destination = windows.target.with_name(conflict.name)
+    destination.write_bytes(b"original contents")
+    later = tmp_path / "Later.ttf"
+    later.write_bytes(b"not attempted")
+
+    results = list(installer.install_files([repeat, windows.source, conflict, later]))
+    assert [(r.path, r.status) for r in results] == [
+        (repeat, "skipped"),
+        (windows.source, "installed"),
+        (conflict, "failed"),
+    ]
+    assert "--replace" in results[-1].message
+    assert destination.read_bytes() == b"original contents"
+    assert set(windows.values) == {"Already", "Demo"}
+    assert not windows.target.with_name(later.name).exists()
+    assert windows.broadcasts == [True, True]
+
+
 def test_immediate_activation_failure_is_a_warning(windows, monkeypatch, capsys):
     monkeypatch.setattr(installer, "add_font_resource", lambda path: 0)
     assert main(["install", str(windows.source)]) == 0

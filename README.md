@@ -16,6 +16,16 @@ To install a single font for your Windows account, pass its path.
 fonti install .\Regular.ttf
 ```
 
+## Windows desktop app
+
+Open `Fonti.exe` on x64 Windows 10 version 1809 or later with Microsoft Edge WebView2 Runtime installed. Choose a folder, select fonts from its subfolders, and click **Install selected** to install them for your account. The app includes Fonti, Python, and JadeView.
+
+To build `dist/Fonti.exe` from a checkout, use x64 Python and run the following command. The build downloads the pinned JadeView runtime and verifies its SHA-256. To use an existing copy of the official ZIP, append `--sdk-zip PATH` to the command. [JadeView release](https://github.com/JadeViewDocs/JadeView/releases/tag/v3.0.0-beta.6)
+
+```powershell
+uv run --locked --with pyinstaller==6.22.3 python desktop/build.py
+```
+
 ## Install a font family from a release ZIP
 
 Use the ZIP download link from the [LXGW WenKai v1.530 release](https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530). Preview the fonts, install them for your account, then list the installed entries.
